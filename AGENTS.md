@@ -142,8 +142,9 @@ Without Workbench, scripts use the compatibility harness and label runs
 `airflow`; they are not Control-M either.
 
 The Airflow unit tests live in `runtimes/airflow/tests/`. Those that import
-Airflow run with its venv:
-`cd runtimes/airflow/tests && ../../../workspace/airflow/venv/bin/python -m unittest test_airflow_dag -v`.
+Airflow run with its venv and settings (without the settings, Airflow writes
+to `~/airflow`):
+`bash -c 'source scripts/lib/common.sh && source scripts/lib/airflow.sh && cd runtimes/airflow/tests && "$AIRFLOW_PYTHON" -m unittest test_airflow_dag -v'`.
 The others need only Python:
 `cd runtimes/airflow/tests && PYTHONPATH=..:../../control-m/harness python3 -m unittest test_airflow_runner -v`.
 
