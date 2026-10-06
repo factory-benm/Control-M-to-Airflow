@@ -34,7 +34,7 @@ Each job calls a wrapper that hands the work to the repository that owns it.
 | `repos/*` | Eight Python services (standard library only), one per business step. |
 | `fixtures/` | Five test scenarios with expected results, the business calendar, FX rates, and the shared execution contract. |
 | `runtimes/control-m/` | Compatibility harness and result checker, plus the optional BMC Workbench pin. |
-| `scripts/` | Prerequisite check, validation, scenario runner, compatibility test. |
+| `scripts/` | Prerequisite check, validation, scenario runner, compatibility test, and `check.sh`, which runs them all. |
 
 ## Run it
 
@@ -56,6 +56,13 @@ harness. It runs the jobs exactly as the Control-M definitions declare them and
 labels every run `compatibility-harness`. It is not Control-M.
 
 Each repository has its own tests: `repos/<name>/scripts/test.sh`.
+
+To run everything at once (prerequisites, Control-M validation, every
+repository's tests, and the compatibility test):
+
+```sh
+./scripts/check.sh
+```
 
 ## Workshop flow
 
