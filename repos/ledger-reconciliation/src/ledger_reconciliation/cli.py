@@ -11,10 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import common
-from . import cutoff
-from . import ledger
-from . import reconcile
+from . import common, cutoff, ledger, reconcile
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -41,6 +38,61 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _fail(envelope: common.JsonObject, code: int, err_code: str, message: str) -> int:
+    envelope.update(
+        {
+            "status": "failed",
+            "exitCode": code,
+            "counts": {},
+            "artifacts": [],
+            "metrics": {},
+            "error": {"code": err_code, "message": message},
+        }
+    )
+    common.emit_result(envelope)
+    return code
+
+
+def _usage_problem(args: argparse.Namespace) -> str | None:
+    if not args.run_dir or not args.scenario or not args.task:
+        return "missing required argument(s): --run-dir, --scenario, --task"
+    run_dir = Path(args.run_dir).resolve()
+    if not run_dir.is_dir():
+        return f"run-dir is not a directory: {run_dir}"
+    if args.task not in common.OWNED_TASKS:
+        return f"task not owned by {common.REPO_NAME}: {args.task}"
+    return None
+
+
+def _run_task(task: str, ctx: common.TaskContext) -> tuple[common.JsonObject, int] | None:
+    if task == "apply_business_day_cutoff":
+        return cutoff.run(ctx)
+    if task == "post_pending_ledger":
+        return ledger.run(ctx)
+    if task == "reconcile_nostro_ledger":
+        return reconcile.run(ctx)
+    return None
+
+
+def _execute(envelope: common.JsonObject, task: str, ctx: common.TaskContext) -> int:
+    try:
+        outcome = _run_task(task, ctx)
+    except common.MissingUpstreamError as e:
+        return _fail(envelope, 5, "MISSING_UPSTREAM_ARTIFACT", str(e))
+    except common.BusinessRuleError as e:
+        return _fail(envelope, 4, e.code, str(e))
+    except Exception:
+        return _fail(envelope, 1, "INTERNAL", "unexpected error")
+    if outcome is None:
+        return _fail(envelope, 2, "USAGE", f"task not owned: {task}")
+
+    task_result, exit_code = outcome
+    envelope.update(task_result)
+    envelope["exitCode"] = exit_code
+    common.emit_result(envelope)
+    return exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -53,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    envelope: dict = {
+    envelope: common.JsonObject = {
         "repository": common.REPO_NAME,
         "task": args.task or "",
         "runId": "",
@@ -63,34 +115,17 @@ def main(argv: list[str] | None = None) -> int:
         "completedAt": "",
     }
 
-    def fail(code: int, status: str, err_code: str, message: str) -> int:
-        envelope.update({
-            "status": status,
-            "exitCode": code,
-            "counts": {},
-            "artifacts": [],
-            "metrics": {},
-            "error": {"code": err_code, "message": message},
-        })
-        common.emit_result(envelope)
-        return code
-
-    if not args.run_dir or not args.scenario or not args.task:
-        return fail(2, "failed", "USAGE", "missing required argument(s): --run-dir, --scenario, --task")
+    problem = _usage_problem(args)
+    if problem is not None:
+        return _fail(envelope, 2, "USAGE", problem)
 
     run_dir = Path(args.run_dir).resolve()
-    if not run_dir.is_dir():
-        return fail(2, "failed", "USAGE", f"run-dir is not a directory: {run_dir}")
-
-    if args.task not in common.OWNED_TASKS:
-        return fail(2, "failed", "USAGE", f"task not owned by {common.REPO_NAME}: {args.task}")
-
     repo_root = _repo_root()
     try:
         kit_root = common.resolve_kit_root(args.kit_root, repo_root)
         scenario_cfg = common.load_scenario(kit_root, args.scenario)
     except common.UsageError as e:
-        return fail(2, "failed", "USAGE", str(e))
+        return _fail(envelope, 2, "USAGE", str(e))
 
     now = common.resolve_now(args.now, scenario_cfg)
     attempt = common.resolve_attempt(args.attempt)
@@ -102,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     envelope["startedAt"] = now
     envelope["completedAt"] = now
 
-    ctx = {
+    ctx: common.TaskContext = {
         "run_dir": run_dir,
         "kit_root": kit_root,
         "repo_root": repo_root,
@@ -112,27 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         "now": now,
         "attempt": attempt,
     }
-
-    try:
-        if args.task == "apply_business_day_cutoff":
-            task_result, exit_code = cutoff.run(ctx)
-        elif args.task == "post_pending_ledger":
-            task_result, exit_code = ledger.run(ctx)
-        elif args.task == "reconcile_nostro_ledger":
-            task_result, exit_code = reconcile.run(ctx)
-        else:
-            return fail(2, "failed", "USAGE", f"task not owned: {args.task}")
-    except common.MissingUpstreamError as e:
-        return fail(5, "failed", "MISSING_UPSTREAM_ARTIFACT", str(e))
-    except common.BusinessRuleError as e:
-        return fail(4, "failed", e.code, str(e))
-    except Exception:
-        return fail(1, "failed", "INTERNAL", "unexpected error")
-
-    envelope.update(task_result)
-    envelope["exitCode"] = exit_code
-    common.emit_result(envelope)
-    return exit_code
+    return _execute(envelope, args.task, ctx)
 
 
 if __name__ == "__main__":

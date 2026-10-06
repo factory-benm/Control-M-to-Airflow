@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import common
 
-CLASSIFICATION = {
+CLASSIFICATION: dict[str, dict[str, str]] = {
     "MISSING_LEDGER_REFERENCE": {"severity": "high", "owner_team": "Nostro Operations"},
     "CURRENCY_MISMATCH": {"severity": "high", "owner_team": "FX Operations"},
     "AMOUNT_MISMATCH": {"severity": "medium", "owner_team": "Reconciliation Operations"},
@@ -17,7 +17,7 @@ CLASSIFICATION = {
 }
 
 
-def classify(reason_code: str) -> dict:
+def classify(reason_code: str) -> dict[str, str]:
     entry = CLASSIFICATION.get(reason_code)
     if entry is None:
         raise common.BusinessRuleError(
@@ -26,7 +26,7 @@ def classify(reason_code: str) -> dict:
     return entry
 
 
-def run(ctx: dict) -> tuple[dict, int]:
+def run(ctx: common.TaskContext) -> tuple[common.JsonDict, int]:
     run_dir: Path = ctx["run_dir"]
     scenario: str = ctx["scenario"]
     run_id: str = ctx["run_id"]
@@ -35,7 +35,7 @@ def run(ctx: dict) -> tuple[dict, int]:
     common.log(f"reading {breaks_path}")
     breaks = common.read_jsonl(breaks_path)
 
-    classified: list[dict] = []
+    classified: list[common.JsonDict] = []
     by_severity: dict[str, int] = {}
     by_owner: dict[str, int] = {}
     for brk in breaks:
@@ -50,22 +50,28 @@ def run(ctx: dict) -> tuple[dict, int]:
     classified_jsonl = run_dir / "stages" / "classified-breaks.jsonl"
     exceptions_json = run_dir / "stages" / "exceptions.json"
     common.write_jsonl(classified_jsonl, classified)
-    common.write_json(exceptions_json, {
-        "scenario": scenario,
-        "runId": run_id,
-        "counts": {"broken": len(classified)},
-        "bySeverity": by_severity,
-        "byOwner": by_owner,
-    })
+    common.write_json(
+        exceptions_json,
+        {
+            "scenario": scenario,
+            "runId": run_id,
+            "counts": {"broken": len(classified)},
+            "bySeverity": by_severity,
+            "byOwner": by_owner,
+        },
+    )
     common.log(f"classified {len(classified)} breaks")
 
-    result = {
+    result: common.JsonDict = {
         "status": "success",
         "counts": {"broken": len(classified)},
-        "artifacts": common.artifacts_for(run_dir, [
-            "stages/classified-breaks.jsonl",
-            "stages/exceptions.json",
-        ]),
+        "artifacts": common.artifacts_for(
+            run_dir,
+            [
+                "stages/classified-breaks.jsonl",
+                "stages/exceptions.json",
+            ],
+        ),
         "metrics": {"bySeverity": by_severity, "byOwner": by_owner},
     }
     return result, 0

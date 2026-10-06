@@ -64,6 +64,23 @@ repository's tests, and the compatibility test):
 ./scripts/check.sh
 ```
 
+## Develop
+
+There is nothing to compile: the services run in place. To change code, install
+the pinned dev tools (ruff, mypy, vulture, pytest, pre-commit) and the commit
+hooks once:
+
+```sh
+uv venv .venv && uv pip install --python .venv/bin/python --require-hashes -r requirements-dev.txt
+.venv/bin/pre-commit install
+```
+
+`./scripts/check.sh` then also runs lint, formatting, strict type checks, dead
+code detection, file size limits, and a 95% per-repository coverage gate.
+`./scripts/lint.sh --fix` applies formatting and safe lint fixes. The rules are
+in [AGENTS.md](AGENTS.md#code-quality-rules); CI runs the same command on every
+pull request.
+
 ## Workshop flow
 
 1. `/readiness-report`, then fix the gaps that matter (`AGENTS.md`, one check command).

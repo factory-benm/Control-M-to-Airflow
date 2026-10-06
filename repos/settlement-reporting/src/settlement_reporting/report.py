@@ -8,15 +8,14 @@ and asserts the canonical count equation (CONTRACT section 5).
 from __future__ import annotations
 
 import csv
+import json
 import sqlite3
+from collections.abc import Iterator, Mapping
 from pathlib import Path
+from typing import Any
 
 from . import common
-
-COUNT_NAMES = [
-    "received", "rejected", "duplicatesRemoved", "accepted",
-    "cutoffAdjusted", "posted", "matched", "broken",
-]
+from .common import JsonDict, TaskContext
 
 COUNT_EQUATIONS = [
     "received == rejected + duplicatesRemoved + accepted",
@@ -53,14 +52,14 @@ def count_posted(db_path: Path) -> int:
         raise common.MissingUpstreamError(f"ledger not found: {db_path}")
     conn = sqlite3.connect(str(db_path))
     try:
-        return conn.execute(
-            "SELECT COUNT(*) FROM ledger_entry WHERE state = 'posted'"
-        ).fetchone()[0]
+        row = conn.execute("SELECT COUNT(*) FROM ledger_entry WHERE state = 'posted'").fetchone()
+        posted: int = row[0]
+        return posted
     finally:
         conn.close()
 
 
-def assemble_counts(run_dir: Path) -> dict:
+def assemble_counts(run_dir: Path) -> dict[str, int]:
     """Derive the full canonical count set from ground-truth artifacts."""
     received = count_csv_rows(run_dir / "input" / "payments.csv")
     rejected = count_jsonl(run_dir / "stages" / "rejections.jsonl")
@@ -84,20 +83,20 @@ def assemble_counts(run_dir: Path) -> dict:
     }
 
 
-def _iter_cutoff_adjusted(path: Path):
+def _iter_cutoff_adjusted(path: Path) -> Iterator[JsonDict]:
     if not path.exists():
         return
     with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.rstrip("\n")
+        for raw in fh:
+            line = raw.rstrip("\n")
             if not line:
                 continue
-            rec = __import__("json").loads(line)
+            rec: JsonDict = json.loads(line)
             if rec.get("cutoff_applied") is True:
                 yield rec
 
 
-def assert_count_equation(counts: dict) -> None:
+def assert_count_equation(counts: Mapping[str, int]) -> None:
     c = counts
     ok1 = c["received"] == c["rejected"] + c["duplicatesRemoved"] + c["accepted"]
     ok2 = c["accepted"] == c["posted"]
@@ -112,9 +111,9 @@ def assert_count_equation(counts: dict) -> None:
         )
 
 
-def build_archive_manifest(run_dir: Path, exclude: set[str]) -> list[dict]:
+def build_archive_manifest(run_dir: Path, exclude: set[str]) -> list[JsonDict]:
     """Hash every run artifact except those in `exclude` (relative paths)."""
-    items: list[dict] = []
+    items: list[JsonDict] = []
     for sub in ("input", "stages", "ledger", "output"):
         base = run_dir / sub
         if not base.is_dir():
@@ -125,16 +124,18 @@ def build_archive_manifest(run_dir: Path, exclude: set[str]) -> list[dict]:
             rel = p.relative_to(run_dir).as_posix()
             if rel in exclude:
                 continue
-            items.append({
-                "path": rel,
-                "sha256": common.sha256_file(p),
-                "size": p.stat().st_size,
-            })
+            items.append(
+                {
+                    "path": rel,
+                    "sha256": common.sha256_file(p),
+                    "size": p.stat().st_size,
+                }
+            )
     items.sort(key=lambda a: a["path"])
     return items
 
 
-def _load_ledger_rows(db_path: Path) -> list[dict]:
+def _load_ledger_rows(db_path: Path) -> list[JsonDict]:
     conn = sqlite3.connect(str(db_path))
     try:
         conn.row_factory = sqlite3.Row
@@ -148,7 +149,7 @@ def _load_ledger_rows(db_path: Path) -> list[dict]:
         conn.close()
 
 
-def run(ctx: dict) -> tuple[dict, int]:
+def run(ctx: TaskContext) -> tuple[JsonDict, int]:
     run_dir: Path = ctx["run_dir"]
     scenario: str = ctx["scenario"]
     run_id: str = ctx["run_id"]
@@ -167,7 +168,7 @@ def run(ctx: dict) -> tuple[dict, int]:
     ledger_rows = _load_ledger_rows(run_dir / "ledger" / "ledger.sqlite3")
 
     # Per-payment disposition table, sorted by payment_id then line_number.
-    disposition: dict[str, dict] = {}
+    disposition: dict[str, JsonDict] = {}
     for r in cutoff:
         disposition[r["payment_id"]] = {
             "payment_id": r["payment_id"],
@@ -193,35 +194,41 @@ def run(ctx: dict) -> tuple[dict, int]:
             d["severity"] = b.get("severity", "")
             d["owner_team"] = b.get("owner_team", "")
     for r in rejections:
-        disposition.setdefault(r["payment_id"], {
-            "payment_id": r["payment_id"],
-            "line_number": r.get("line_number", ""),
-            "ledger_reference": r.get("ledger_reference", ""),
-            "currency": r.get("currency", ""),
-            "amount": r.get("amount", ""),
-            "base_amount": "",
-            "effective_value_date": "",
-            "disposition": "rejected",
-            "reason_code": r.get("reason_code", ""),
-            "severity": "",
-            "owner_team": "",
-        })
+        disposition.setdefault(
+            r["payment_id"],
+            {
+                "payment_id": r["payment_id"],
+                "line_number": r.get("line_number", ""),
+                "ledger_reference": r.get("ledger_reference", ""),
+                "currency": r.get("currency", ""),
+                "amount": r.get("amount", ""),
+                "base_amount": "",
+                "effective_value_date": "",
+                "disposition": "rejected",
+                "reason_code": r.get("reason_code", ""),
+                "severity": "",
+                "owner_team": "",
+            },
+        )
         disposition[r["payment_id"]]["disposition"] = "rejected"
         disposition[r["payment_id"]]["reason_code"] = r.get("reason_code", "")
     for d in duplicates:
-        disposition.setdefault(d["payment_id"], {
-            "payment_id": d["payment_id"],
-            "line_number": d.get("line_number", ""),
-            "ledger_reference": d.get("ledger_reference", ""),
-            "currency": d.get("currency", ""),
-            "amount": d.get("amount", ""),
-            "base_amount": "",
-            "effective_value_date": "",
-            "disposition": "duplicate",
-            "reason_code": "",
-            "severity": "",
-            "owner_team": "",
-        })
+        disposition.setdefault(
+            d["payment_id"],
+            {
+                "payment_id": d["payment_id"],
+                "line_number": d.get("line_number", ""),
+                "ledger_reference": d.get("ledger_reference", ""),
+                "currency": d.get("currency", ""),
+                "amount": d.get("amount", ""),
+                "base_amount": "",
+                "effective_value_date": "",
+                "disposition": "duplicate",
+                "reason_code": "",
+                "severity": "",
+                "owner_team": "",
+            },
+        )
         disposition[d["payment_id"]]["disposition"] = "duplicate"
 
     rows = sorted(disposition.values(), key=lambda r: (r["payment_id"], r["line_number"]))
@@ -231,29 +238,52 @@ def run(ctx: dict) -> tuple[dict, int]:
     archive_manifest = run_dir / "output" / "archive-manifest.json"
     reporting_stage = run_dir / "stages" / "reporting.json"
 
-    report_obj = {
+    report_obj: dict[str, Any] = {
         "scenario": scenario,
         "runId": run_id,
         "counts": counts,
         "countEquations": COUNT_EQUATIONS,
         "matched": sorted(
-            [{"payment_id": m["payment_id"], "ledger_reference": m["ledger_reference"],
-              "amount": m["amount"], "currency": m["currency"]} for m in matched],
-            key=lambda x: x["payment_id"]),
+            [
+                {
+                    "payment_id": m["payment_id"],
+                    "ledger_reference": m["ledger_reference"],
+                    "amount": m["amount"],
+                    "currency": m["currency"],
+                }
+                for m in matched
+            ],
+            key=lambda x: x["payment_id"],
+        ),
         "broken": sorted(
-            [{"payment_id": b["payment_id"], "reason_code": b["reason_code"],
-              "severity": b.get("severity", ""), "owner_team": b.get("owner_team", "")}
-             for b in classified],
-            key=lambda x: x["payment_id"]),
+            [
+                {
+                    "payment_id": b["payment_id"],
+                    "reason_code": b["reason_code"],
+                    "severity": b.get("severity", ""),
+                    "owner_team": b.get("owner_team", ""),
+                }
+                for b in classified
+            ],
+            key=lambda x: x["payment_id"],
+        ),
         "ledgerRowCount": len(ledger_rows),
         "generatedAt": now,
     }
     common.write_json(report_json, report_obj)
 
     csv_columns = [
-        "payment_id", "line_number", "ledger_reference", "currency", "amount",
-        "base_amount", "effective_value_date", "disposition", "reason_code",
-        "severity", "owner_team",
+        "payment_id",
+        "line_number",
+        "ledger_reference",
+        "currency",
+        "amount",
+        "base_amount",
+        "effective_value_date",
+        "disposition",
+        "reason_code",
+        "severity",
+        "owner_team",
     ]
     report_csv.parent.mkdir(parents=True, exist_ok=True)
     with report_csv.open("w", encoding="utf-8", newline="") as fh:
@@ -263,34 +293,43 @@ def run(ctx: dict) -> tuple[dict, int]:
             writer.writerow({k: row.get(k, "") for k in csv_columns})
 
     manifest = build_archive_manifest(run_dir, exclude={"output/archive-manifest.json"})
-    common.write_json(archive_manifest, {
-        "scenario": scenario,
-        "runId": run_id,
-        "generatedAt": now,
-        "artifacts": manifest,
-    })
+    common.write_json(
+        archive_manifest,
+        {
+            "scenario": scenario,
+            "runId": run_id,
+            "generatedAt": now,
+            "artifacts": manifest,
+        },
+    )
 
-    common.write_json(reporting_stage, {
-        "scenario": scenario,
-        "runId": run_id,
-        "counts": counts,
-        "artifacts": [
-            "output/settlement-report.json",
-            "output/settlement-report.csv",
-            "output/archive-manifest.json",
-        ],
-    })
+    common.write_json(
+        reporting_stage,
+        {
+            "scenario": scenario,
+            "runId": run_id,
+            "counts": counts,
+            "artifacts": [
+                "output/settlement-report.json",
+                "output/settlement-report.csv",
+                "output/archive-manifest.json",
+            ],
+        },
+    )
     common.log("report written")
 
-    result = {
+    result: JsonDict = {
         "status": "success",
         "counts": counts,
-        "artifacts": common.artifacts_for(run_dir, [
-            "output/settlement-report.json",
-            "output/settlement-report.csv",
-            "output/archive-manifest.json",
-            "stages/reporting.json",
-        ]),
+        "artifacts": common.artifacts_for(
+            run_dir,
+            [
+                "output/settlement-report.json",
+                "output/settlement-report.csv",
+                "output/archive-manifest.json",
+                "stages/reporting.json",
+            ],
+        ),
         "metrics": {"ledgerRows": len(ledger_rows)},
     }
     return result, 0

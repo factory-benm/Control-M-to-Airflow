@@ -51,6 +51,7 @@ if have python3; then
   # The estate is standard-library only by design. Say so, so nobody hunts for
   # a requirements file that does not exist.
   info "$(printf '%-22s %s' "python packages" "none required; the estate is standard-library only")"
+  info "$(printf '%-22s %s' "dev tools" "optional; pinned in requirements-dev.txt (see AGENTS.md)")"
 fi
 
 heading "Preferred (Control-M Workbench only)"

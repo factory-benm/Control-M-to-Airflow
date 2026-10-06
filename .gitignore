@@ -8,8 +8,19 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .venv/
 venv/
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build output
+build/
+dist/
+node_modules/
 
 # Databases and runtime artifacts
 *.sqlite3

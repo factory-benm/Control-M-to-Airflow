@@ -21,13 +21,29 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
+from typing import Any
 
 VOLATILE_KEYS = {
-    "startedAt", "completedAt", "generatedAt", "capturedAt", "importedAt",
-    "selectedAt", "probedAt", "scannedAt", "validatedAt",
-    "durationMs", "elapsedMs", "elapsed", "durationSeconds",
-    "runId", "run_id", "hostArchitecture", "composeCommand", "containerId",
-    "pid", "port",
+    "startedAt",
+    "completedAt",
+    "generatedAt",
+    "capturedAt",
+    "importedAt",
+    "selectedAt",
+    "probedAt",
+    "scannedAt",
+    "validatedAt",
+    "durationMs",
+    "elapsedMs",
+    "elapsed",
+    "durationSeconds",
+    "runId",
+    "run_id",
+    "hostArchitecture",
+    "composeCommand",
+    "containerId",
+    "pid",
+    "port",
     # Hashes of run-scoped artifacts are volatile across run identifiers,
     # because those artifacts embed the run identifier by design. Byte-level
     # stability is proven separately by re-running the same scenario with the
@@ -36,30 +52,33 @@ VOLATILE_KEYS = {
     # Deliberately NOT listed here: source_file_sha256, which hashes an
     # immutable input fixture. That value must stay comparable, because it is
     # what lets an output row be traced back to its input.
-    "sha256", "archiveSha256", "reportSha256",
+    "sha256",
+    "archiveSha256",
+    "reportSha256",
 }
 VOLATILE_PLACEHOLDER = "<volatile>"
 TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
 
-
-def load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+JsonObject = dict[str, Any]
 
 
-def read_jsonl(path: Path) -> list[dict]:
+def load_json(path: Path) -> JsonObject:
+    document: JsonObject = json.loads(path.read_text(encoding="utf-8"))
+    return document
+
+
+def read_jsonl(path: Path) -> list[JsonObject]:
     if not path.is_file():
         return []
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
-def normalize(value, run_dir: Path | None = None, run_id: str | None = None):
+def normalize(value: Any, run_dir: Path | None = None, run_id: str | None = None) -> Any:
     """Replace volatile values with placeholders, preserving structure."""
     if isinstance(value, dict):
-        result = {}
+        result: JsonObject = {}
         for key, item in value.items():
             if key in VOLATILE_KEYS:
                 result[key] = VOLATILE_PLACEHOLDER
@@ -116,7 +135,8 @@ class Verifier:
         self.check(
             "scenario version matches the fixture",
             self.manifest.get("scenarioVersion") == self.expected.get("scenarioVersion"),
-            f"run={self.manifest.get('scenarioVersion')} fixture={self.expected.get('scenarioVersion')}",
+            f"run={self.manifest.get('scenarioVersion')} "
+            f"fixture={self.expected.get('scenarioVersion')}",
         )
 
     def verify_counts(self) -> None:
@@ -129,11 +149,22 @@ class Verifier:
                 f"expected {expected[key]}, observed {observed.get(key)}",
             )
         # The equations are asserted independently of the authored numbers.
-        if all(key in observed for key in
-               ("received", "rejected", "duplicatesRemoved", "accepted", "posted", "matched", "broken")):
+        if all(
+            key in observed
+            for key in (
+                "received",
+                "rejected",
+                "duplicatesRemoved",
+                "accepted",
+                "posted",
+                "matched",
+                "broken",
+            )
+        ):
             self.check(
                 "received == rejected + duplicatesRemoved + accepted",
-                observed["received"] == observed["rejected"] + observed["duplicatesRemoved"] + observed["accepted"],
+                observed["received"]
+                == observed["rejected"] + observed["duplicatesRemoved"] + observed["accepted"],
                 json.dumps(observed),
             )
             self.check(
@@ -158,8 +189,11 @@ class Verifier:
         ]
         # A declared rerun of the whole graph repeats the sequence; compare the
         # first pass, then confirm the repeat is identical.
-        if len(observed) == 2 * len(expected) and observed[:len(expected)] == observed[len(expected):]:
-            observed = observed[:len(expected)]
+        if (
+            len(observed) == 2 * len(expected)
+            and observed[: len(expected)] == observed[len(expected) :]
+        ):
+            observed = observed[: len(expected)]
         self.check(
             "exit sequence matches the fixture",
             observed == expected,
@@ -171,10 +205,7 @@ class Verifier:
         if not expected:
             return
         records = read_jsonl(self.run_dir / "stages" / "cutoff-payments.jsonl")
-        observed = {
-            row["payment_id"]: row.get("effective_value_date")
-            for row in records
-        }
+        observed = {row["payment_id"]: row.get("effective_value_date") for row in records}
         mismatched = {
             payment: (expected[payment], observed.get(payment))
             for payment in sorted(expected)
@@ -227,8 +258,9 @@ class Verifier:
         )
 
         expected_breaks = self.expected.get("breaks") or []
-        observed_breaks = read_jsonl(self.run_dir / "stages" / "classified-breaks.jsonl") or \
-            read_jsonl(self.run_dir / "stages" / "breaks.jsonl")
+        observed_breaks = read_jsonl(
+            self.run_dir / "stages" / "classified-breaks.jsonl"
+        ) or read_jsonl(self.run_dir / "stages" / "breaks.jsonl")
         self.check(
             f"break count ({len(expected_breaks)})",
             len(observed_breaks) == len(expected_breaks),
@@ -374,7 +406,7 @@ class Verifier:
         rows = self.manifest.get("ledgerRowsAfterPass") or []
         self.check(
             f"ledger holds {declared['expectedPostedAfterRerun']} rows after the declared rerun",
-            rows and rows[-1] == declared["expectedPostedAfterRerun"],
+            bool(rows) and rows[-1] == declared["expectedPostedAfterRerun"],
             f"expected {declared['expectedPostedAfterRerun']}, observed {rows}",
         )
         if len(rows) >= 2:
@@ -387,7 +419,9 @@ class Verifier:
 
     def verify_invariants(self) -> None:
         declared = {item["id"]: item["expected"] for item in self.expected.get("invariants") or []}
-        observed = {item["id"]: item["status"] == "pass" for item in self.manifest.get("invariants") or []}
+        observed = {
+            item["id"]: item["status"] == "pass" for item in self.manifest.get("invariants") or []
+        }
         for identifier in sorted(declared):
             if identifier == "INV-DETERMINISTIC-RERUN":
                 # Proven by comparing two runs, not observable within one.
@@ -395,15 +429,20 @@ class Verifier:
             self.check(
                 f"invariant {identifier} holds",
                 observed.get(identifier) is True,
-                "not evaluated by the runtime" if identifier not in observed
+                "not evaluated by the runtime"
+                if identifier not in observed
                 else "evaluated as failing",
             )
 
     def verify_no_leaked_secrets(self) -> None:
         """Customer-visible artifacts must not carry host paths or user names."""
         suspicious: list[str] = []
-        for relative in ("output/settlement-report.json", "output/archive-manifest.json",
-                         "output/notification.json", "run-manifest.json"):
+        for relative in (
+            "output/settlement-report.json",
+            "output/archive-manifest.json",
+            "output/notification.json",
+            "run-manifest.json",
+        ):
             candidate = self.run_dir / relative
             if not candidate.is_file():
                 continue
@@ -433,11 +472,11 @@ class Verifier:
         return not self.failures
 
 
-def normalized_view(run_dir: Path) -> dict:
+def normalized_view(run_dir: Path) -> JsonObject:
     """A comparable projection of a run, with volatile fields neutralized."""
     manifest = load_json(run_dir / "run-manifest.json")
     run_id = manifest.get("runId")
-    view = {
+    view: JsonObject = {
         "scenario": manifest["scenario"],
         "counts": manifest["counts"],
         "exitSequence": manifest["exitSequence"],
@@ -456,17 +495,22 @@ def normalized_view(run_dir: Path) -> dict:
     if stages_dir.is_dir():
         for path in sorted(stages_dir.glob("*.jsonl")):
             view["stages"][path.name] = normalize(read_jsonl(path), run_dir, run_id)
-    for relative in ("output/settlement-report.json", "output/archive-manifest.json",
-                     "output/notification.json"):
+    for relative in (
+        "output/settlement-report.json",
+        "output/archive-manifest.json",
+        "output/notification.json",
+    ):
         candidate = run_dir / relative
         if candidate.is_file():
             view[relative] = normalize(load_json(candidate), run_dir, run_id)
-    return normalize(view, run_dir, run_id)
+    normalized: JsonObject = normalize(view, run_dir, run_id)
+    return normalized
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--run-dir", required=True, type=Path)
     parser.add_argument("--kit-root", required=True, type=Path)
     parser.add_argument(
@@ -490,8 +534,10 @@ def main() -> int:
     ok = verifier.run()
 
     if not arguments.quiet:
-        print(f"verify: scenario={verifier.scenario} "
-              f"checks={len(verifier.checks)} failures={len(verifier.failures)}")
+        print(
+            f"verify: scenario={verifier.scenario} "
+            f"checks={len(verifier.checks)} failures={len(verifier.failures)}"
+        )
     for failure in verifier.failures:
         print(f"  FAIL {failure}", file=sys.stderr)
     if ok and not arguments.quiet:

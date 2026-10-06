@@ -1,2 +1,3 @@
 """payment-notifications package: archive_and_notify task."""
-__all__ = ["common", "notify", "cli"]
+
+__all__ = ["cli", "common", "notify"]

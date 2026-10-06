@@ -3,15 +3,18 @@
 # Run every check for the estate, in order:
 #
 #   1. prerequisite check         scripts/check-prereqs.sh
-#   2. Control-M validation       scripts/controlm-validate.sh
-#   3. every repository's tests   repos/*/scripts/test.sh
-#   4. compatibility test         scripts/test-controlm-compatibility.sh
+#   2. file size limits           scripts/check-file-sizes.sh
+#   3. lint, format, types        scripts/lint.sh (skipped if dev tools are unavailable)
+#   4. Control-M validation       scripts/controlm-validate.sh
+#   5. every repository's tests   repos/*/scripts/test.sh
+#   6. coverage thresholds        scripts/coverage.sh
+#   7. compatibility test         scripts/test-controlm-compatibility.sh
 #
 # If the prerequisite check fails, nothing else runs. Otherwise every step runs
 # even when an earlier one fails, so one invocation reports every failure.
 #
 # Exit codes:
-#   0   every check passed
+#   0   every check passed (a skipped lint step still counts as passing)
 #   1   one or more checks failed
 #   2   usage error
 
@@ -19,7 +22,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 if [ $# -gt 0 ]; then
   case "$1" in
-    -h|--help) sed -n '3,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "$EXIT_OK" ;;
+    -h|--help) sed -n '3,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "$EXIT_OK" ;;
     *) err "unexpected argument '$1'"; exit "$EXIT_USAGE" ;;
   esac
 fi
@@ -34,14 +37,18 @@ run_step() {
   started=$SECONDS
   log ""
   log "==> $label"
-  if "$@"; then
+  local code=0
+  "$@" || code=$?
+  if [ "$code" -eq 0 ]; then
     status="pass"
+  elif [ "$code" -eq "$EXIT_UNAVAILABLE" ] && [ "${ALLOW_SKIP:-0}" = "1" ]; then
+    status="skipped"
   else
-    status="FAIL (exit $?)"
+    status="FAIL (exit $code)"
     FAILURES=$((FAILURES + 1))
   fi
   RESULTS+=("$(printf '%-42s %-14s %ss' "$label" "$status" "$((SECONDS - started))")")
-  [ "$status" = "pass" ]
+  [ "$status" != "FAIL (exit $code)" ]
 }
 
 summary() {
@@ -56,6 +63,8 @@ if ! run_step "prerequisites" "$KIT_ROOT/scripts/check-prereqs.sh"; then
   exit "$EXIT_FAILED"
 fi
 
+run_step "file size limits" "$KIT_ROOT/scripts/check-file-sizes.sh" || true
+ALLOW_SKIP=1 run_step "lint, format, types" "$KIT_ROOT/scripts/lint.sh" || true
 run_step "Control-M validation" "$KIT_ROOT/scripts/controlm-validate.sh" || true
 
 found_tests=0
@@ -71,6 +80,7 @@ if [ "$found_tests" -eq 0 ]; then
   FAILURES=$((FAILURES + 1))
 fi
 
+run_step "coverage thresholds" "$KIT_ROOT/scripts/coverage.sh" || true
 run_step "Control-M compatibility test" "$KIT_ROOT/scripts/test-controlm-compatibility.sh" || true
 
 summary

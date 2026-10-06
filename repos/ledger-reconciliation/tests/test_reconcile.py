@@ -5,36 +5,38 @@ import unittest
 from ledger_reconciliation.reconcile import _evaluate
 
 
-def _posted(currency="SGD", amount="12500.00", payment_id="PAY-2026-0001"):
+def _posted(
+    currency: str = "SGD", amount: str = "12500.00", payment_id: str = "PAY-2026-0001"
+) -> dict[str, str]:
     return {"payment_id": payment_id, "currency": currency, "amount": amount}
 
 
 class TestBreakEvaluation(unittest.TestCase):
-    def test_matched(self):
+    def test_matched(self) -> None:
         ref = {"payment_id": "PAY-2026-0001", "currency": "SGD", "amount": "12500.00"}
         outcome, _ = _evaluate(_posted(), ref)
         self.assertEqual(outcome, "matched")
 
-    def test_missing_ledger_reference(self):
+    def test_missing_ledger_reference(self) -> None:
         outcome, detail = _evaluate(_posted(), None)
         self.assertEqual(outcome, "MISSING_LEDGER_REFERENCE")
         self.assertIsNone(detail["expected_payment_id"])
         self.assertEqual(detail["actual_currency"], "SGD")
 
-    def test_unmatched_payment(self):
+    def test_unmatched_payment(self) -> None:
         ref = {"payment_id": "PAY-2026-0099", "currency": "SGD", "amount": "12500.00"}
         outcome, detail = _evaluate(_posted(), ref)
         self.assertEqual(outcome, "UNMATCHED_PAYMENT")
         self.assertEqual(detail["expected_payment_id"], "PAY-2026-0099")
 
-    def test_currency_mismatch(self):
+    def test_currency_mismatch(self) -> None:
         ref = {"payment_id": "PAY-2026-0001", "currency": "USD", "amount": "12500.00"}
         outcome, detail = _evaluate(_posted(), ref)
         self.assertEqual(outcome, "CURRENCY_MISMATCH")
         self.assertEqual(detail["expected_currency"], "USD")
         self.assertEqual(detail["actual_currency"], "SGD")
 
-    def test_amount_mismatch(self):
+    def test_amount_mismatch(self) -> None:
         ref = {"payment_id": "PAY-2026-0001", "currency": "SGD", "amount": "78500.00"}
         outcome, detail = _evaluate(_posted(amount="78000.00"), ref)
         self.assertEqual(outcome, "AMOUNT_MISMATCH")

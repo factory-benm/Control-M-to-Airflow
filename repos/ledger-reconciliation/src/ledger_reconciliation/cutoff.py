@@ -7,27 +7,27 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from . import common
 
 
-def _load_calendar(kit_root: Path, calendar_rel: str) -> dict:
+def _load_calendar(kit_root: Path, calendar_rel: str) -> common.JsonObject:
     cal_path = kit_root / calendar_rel
     if not cal_path.exists():
         raise common.UsageError(f"calendar not found: {cal_path}")
-    return common.read_json(cal_path)
+    calendar: common.JsonObject = common.read_json(cal_path)
+    return calendar
 
 
-def _holiday_dates(calendar: dict) -> set[date]:
+def _holiday_dates(calendar: common.JsonObject) -> set[date]:
     holidays: set[date] = set()
     for entry in calendar.get("holidays", []):
         holidays.add(date.fromisoformat(entry["date"]))
     return holidays
 
 
-def _weekend_days(calendar: dict) -> set[int]:
+def _weekend_days(calendar: common.JsonObject) -> set[int]:
     """Return set of weekday numbers (Mon=0..Sun=6) that are weekend days."""
     names = set(calendar.get("weekend", ["Saturday", "Sunday"]))
     name_to_num = {
@@ -45,9 +45,7 @@ def _weekend_days(calendar: dict) -> set[int]:
 def is_business_day(d: date, holidays: set[date], weekend: set[int]) -> bool:
     if d.weekday() in weekend:
         return False
-    if d in holidays:
-        return False
-    return True
+    return d not in holidays
 
 
 def next_business_day(d: date, holidays: set[date], weekend: set[int]) -> date:
@@ -85,10 +83,10 @@ def compute_effective_value_date(
     return eff, True
 
 
-def run(ctx: dict) -> tuple[dict, int]:
-    run_dir: Path = ctx["run_dir"]
-    kit_root: Path = ctx["kit_root"]
-    scenario_cfg: dict = ctx["scenario_cfg"]
+def run(ctx: common.TaskContext) -> tuple[common.JsonObject, int]:
+    run_dir = ctx["run_dir"]
+    kit_root = ctx["kit_root"]
+    scenario_cfg = ctx["scenario_cfg"]
 
     enriched_path = run_dir / "stages" / "enriched-payments.jsonl"
     common.log(f"reading {enriched_path}")
@@ -102,10 +100,10 @@ def run(ctx: dict) -> tuple[dict, int]:
     weekend = _weekend_days(calendar)
     calendar_id = calendar["calendarId"]
 
-    out_records: list[dict] = []
+    out_records: list[common.JsonObject] = []
     cutoff_adjusted = 0
     for rec in enriched:
-        eff_date, rolled = compute_effective_value_date(
+        eff_date, _rolled = compute_effective_value_date(
             rec["booking_timestamp"],
             tz_name,
             cutoff_local_time,
@@ -127,25 +125,31 @@ def run(ctx: dict) -> tuple[dict, int]:
     cutoff_jsonl = run_dir / "stages" / "cutoff-payments.jsonl"
     cutoff_json = run_dir / "stages" / "cutoff.json"
     common.write_jsonl(cutoff_jsonl, out_records)
-    common.write_json(cutoff_json, {
-        "scenario": ctx["scenario"],
-        "runId": ctx["run_id"],
-        "calendarId": calendar_id,
-        "cutoffLocalTime": cutoff_local_time,
-        "cutoffTimezone": tz_name,
-        "counts": {"cutoffAdjusted": cutoff_adjusted},
-        "inputRecords": len(out_records),
-    })
+    common.write_json(
+        cutoff_json,
+        {
+            "scenario": ctx["scenario"],
+            "runId": ctx["run_id"],
+            "calendarId": calendar_id,
+            "cutoffLocalTime": cutoff_local_time,
+            "cutoffTimezone": tz_name,
+            "counts": {"cutoffAdjusted": cutoff_adjusted},
+            "inputRecords": len(out_records),
+        },
+    )
 
     common.log(f"cutoffAdjusted={cutoff_adjusted} of {len(out_records)}")
 
-    result = {
+    result: common.JsonObject = {
         "status": "success",
         "counts": {"cutoffAdjusted": cutoff_adjusted},
-        "artifacts": common.artifacts_for(run_dir, [
-            "stages/cutoff-payments.jsonl",
-            "stages/cutoff.json",
-        ]),
+        "artifacts": common.artifacts_for(
+            run_dir,
+            [
+                "stages/cutoff-payments.jsonl",
+                "stages/cutoff.json",
+            ],
+        ),
         "metrics": {"inputRecords": len(out_records)},
     }
     return result, 0

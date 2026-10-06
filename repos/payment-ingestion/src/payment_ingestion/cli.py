@@ -2,14 +2,18 @@
 
 Emits exactly one JSON object on stdout. All diagnostics go to stderr.
 """
+
 import json
 import os
 import sys
 from pathlib import Path
+from typing import Protocol
 
 from .common import (
     BusinessRuleError,
+    JsonDict,
     MissingUpstreamError,
+    StrPath,
     UsageError,
     load_scenario,
     log,
@@ -17,7 +21,7 @@ from .common import (
     resolve_fixed_clock,
     resolve_kit_root,
 )
-from .tasks import REPOSITORY
+from .tasks import REPOSITORY, Attempt
 
 USAGE = """usage: run-task.sh --run-dir <abs> --scenario <name> --task <task>
                   [--kit-root <abs>] [--run-id <id>] [--now <iso8601-utc>]
@@ -30,7 +34,20 @@ Tasks owned by payment-ingestion:
 """
 
 
-def _load_tasks():
+class TaskFn(Protocol):
+    def __call__(
+        self,
+        run_dir: StrPath,
+        run_id: str,
+        scenario: str,
+        kit_root: StrPath,
+        scenario_doc: JsonDict,
+        now: str,
+        attempt: Attempt,
+    ) -> JsonDict: ...
+
+
+def _load_tasks() -> dict[str, TaskFn]:
     from . import tasks
 
     return {
@@ -40,8 +57,8 @@ def _load_tasks():
     }
 
 
-def _extract_meta(argv):
-    meta = {"task": None, "scenario": None, "run_id": None}
+def _extract_meta(argv: list[str]) -> dict[str, str | None]:
+    meta: dict[str, str | None] = {"task": None, "scenario": None, "run_id": None}
     j = 0
     while j < len(argv) - 1:
         if argv[j] == "--task":
@@ -54,9 +71,11 @@ def _extract_meta(argv):
     return meta
 
 
-def _emit_error(argv, exc, exit_code, code, started_at):
+def _emit_error(
+    argv: list[str], exc: Exception, exit_code: int, code: str, started_at: str | None
+) -> None:
     meta = _extract_meta(argv)
-    result = {
+    result: JsonDict = {
         "task": meta["task"],
         "repository": REPOSITORY,
         "runId": meta["run_id"],
@@ -74,11 +93,11 @@ def _emit_error(argv, exc, exit_code, code, started_at):
     sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     repo_root = Path(__file__).resolve().parents[2]
-    started_at = None
+    started_at: str | None = None
     tasks = _load_tasks()
     try:
         opts = parse_cli_args(argv)
@@ -89,13 +108,13 @@ def main(argv=None):
             raise UsageError("--run-dir, --scenario, and --task are required")
         task = opts["task"]
         if task not in tasks:
-            raise UsageError("unknown task for {}: {}".format(REPOSITORY, task))
+            raise UsageError(f"unknown task for {REPOSITORY}: {task}")
         run_dir = str(Path(opts["run_dir"]).resolve())
         run_id = opts["run_id"] or Path(run_dir).name
         kit_root = resolve_kit_root(opts["kit_root"], os.environ, repo_root)
         scenario_doc = load_scenario(kit_root, opts["scenario"])
         now = resolve_fixed_clock(opts["now"], os.environ, scenario_doc)
-        attempt = opts["attempt"] or int(os.environ.get("PAYOPS_ATTEMPT", "1"))
+        attempt: Attempt = opts["attempt"] or int(os.environ.get("PAYOPS_ATTEMPT", "1"))
         started_at = now
         result = tasks[task](
             run_dir=run_dir,
@@ -122,7 +141,7 @@ def main(argv=None):
         log("business rule: " + str(e))
         _emit_error(argv, e, 4, "BUSINESS_RULE", started_at)
         return 4
-    except Exception as e:  # noqa: BLE001 - last-resort internal error
+    except Exception as e:
         log("internal error: " + str(e))
         _emit_error(argv, e, 1, "INTERNAL", started_at)
         return 1
@@ -130,4 +149,5 @@ def main(argv=None):
 
 if __name__ == "__main__":
     import sys as _sys
+
     _sys.exit(main())

@@ -5,10 +5,16 @@ repository stands alone as an independent Git repository, so small helper
 duplication is the price of that independence. Do not unify these helpers into
 a shared cross-repository package.
 """
+
 import hashlib
 import json
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import Any
+
+JsonDict = dict[str, Any]
+StrPath = str | Path
 
 
 class UsageError(Exception):
@@ -23,12 +29,12 @@ class MissingUpstreamError(Exception):
     """Exit code 5: a required upstream artifact is absent."""
 
 
-def log(message):
+def log(message: str) -> None:
     """Diagnostics to stderr as bare prints."""
     print(message, file=sys.stderr)
 
 
-def sha256_file(path):
+def sha256_file(path: StrPath) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -36,46 +42,44 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def ensure_dir(path):
+def ensure_dir(path: StrPath) -> None:
     Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def write_json(path, obj):
+def write_json(path: StrPath, obj: Any) -> None:
     """Write deterministic JSON: sorted keys, two-space indent, trailing newline."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, sort_keys=True, indent=2)
         f.write("\n")
 
 
-def write_jsonl(path, records):
+def write_jsonl(path: StrPath, records: Iterable[JsonDict]) -> None:
     """Write JSON Lines: one compact object per line, keys sorted, records
     sorted by (payment_id, line_number). UTF-8, newline terminated, no
     trailing blank line."""
-    ordered = sorted(
-        records, key=lambda r: (r.get("payment_id", ""), r.get("line_number", 0))
-    )
+    ordered = sorted(records, key=lambda r: (r.get("payment_id", ""), r.get("line_number", 0)))
     with open(path, "w", encoding="utf-8") as f:
         for r in ordered:
             f.write(json.dumps(r, sort_keys=True, separators=(",", ":")))
             f.write("\n")
 
 
-def read_jsonl(path):
-    records = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
+def read_jsonl(path: StrPath) -> list[JsonDict]:
+    records: list[JsonDict] = []
+    with open(path, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
             if line:
                 records.append(json.loads(line))
     return records
 
 
-def artifact_entry(run_dir, rel_path):
+def artifact_entry(run_dir: StrPath, rel_path: str) -> dict[str, str]:
     abs_path = Path(run_dir) / rel_path
     return {"path": rel_path, "sha256": sha256_file(abs_path)}
 
 
-def resolve_kit_root(arg, env, repo_root):
+def resolve_kit_root(arg: str | None, env: Mapping[str, str], repo_root: StrPath) -> Path:
     """Resolve the estate root containing fixtures/."""
     if arg:
         p = Path(arg).resolve()
@@ -89,28 +93,29 @@ def resolve_kit_root(arg, env, repo_root):
             return p
         raise UsageError("PAYOPS_KIT_ROOT does not contain fixtures/")
     cur = Path(repo_root).resolve()
-    for parent in [cur] + list(cur.parents):
+    for parent in [cur, *cur.parents]:
         if (parent / "fixtures").is_dir():
             return parent
     raise UsageError("could not locate kit root containing fixtures/")
 
 
-def load_scenario(kit_root, scenario):
+def load_scenario(kit_root: StrPath, scenario: str) -> JsonDict:
     path = Path(kit_root) / "fixtures" / "scenarios" / scenario / "scenario.json"
     if not path.is_file():
         raise MissingUpstreamError("scenario not found: " + scenario)
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    with open(path, encoding="utf-8") as f:
+        doc: JsonDict = json.load(f)
+    return doc
 
 
-def resolve_fixed_clock(now_arg, env, scenario_doc):
+def resolve_fixed_clock(now_arg: str | None, env: Mapping[str, str], scenario_doc: JsonDict) -> str:
     if now_arg:
         return now_arg
     env_val = env.get("PAYOPS_FIXED_CLOCK")
     if env_val:
         return env_val
     clock = scenario_doc.get("clock", {})
-    fixed = clock.get("fixedUtc")
+    fixed: str | None = clock.get("fixedUtc")
     if fixed:
         return fixed
     raise UsageError("no fixed clock available; pass --now or PAYOPS_FIXED_CLOCK")
@@ -127,10 +132,10 @@ CLI_FLAGS = (
 )
 
 
-def parse_cli_args(argv):
+def parse_cli_args(argv: list[str]) -> dict[str, str | None] | None:
     """Parse the CLI flag set manually so that errors produce a JSON object on
     stdout rather than argparse's bare usage text."""
-    opts = {k.lstrip("-").replace("-", "_"): None for k in CLI_FLAGS}
+    opts: dict[str, str | None] = {k.lstrip("-").replace("-", "_"): None for k in CLI_FLAGS}
     i = 0
     while i < len(argv):
         a = argv[i]

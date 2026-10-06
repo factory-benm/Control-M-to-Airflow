@@ -11,7 +11,7 @@ from pathlib import Path
 from . import common
 
 
-def run(ctx: dict) -> tuple[dict, int]:
+def run(ctx: common.TaskContext) -> tuple[common.JsonDict, int]:
     run_dir: Path = ctx["run_dir"]
     scenario: str = ctx["scenario"]
     run_id: str = ctx["run_id"]
@@ -21,16 +21,19 @@ def run(ctx: dict) -> tuple[dict, int]:
     archive_path = run_dir / "output" / "archive-manifest.json"
 
     report = common.read_json_optional(report_path)
-    archive = common.read_json_optional(archive_path)
+    # Parsed only so a malformed manifest fails the task; the content is unused.
+    common.read_json_optional(archive_path)
 
     if report is None:
-        raise common.MissingUpstreamError("settlement report not found: output/settlement-report.json")
+        raise common.MissingUpstreamError(
+            "settlement report not found: output/settlement-report.json"
+        )
 
-    counts = report.get("counts", {})
+    counts: common.JsonDict = report.get("counts", {})
     broken = counts.get("broken", 0)
     status = "completed_with_breaks" if broken > 0 else "completed"
 
-    notification = {
+    notification: common.JsonDict = {
         "runId": run_id,
         "scenario": scenario,
         "status": status,
@@ -45,21 +48,27 @@ def run(ctx: dict) -> tuple[dict, int]:
     notification_path = run_dir / "output" / "notification.json"
     notify_stage = run_dir / "stages" / "notify.json"
     common.write_json(notification_path, notification)
-    common.write_json(notify_stage, {
-        "scenario": scenario,
-        "runId": run_id,
-        "status": status,
-        "notificationPath": "output/notification.json",
-    })
+    common.write_json(
+        notify_stage,
+        {
+            "scenario": scenario,
+            "runId": run_id,
+            "status": status,
+            "notificationPath": "output/notification.json",
+        },
+    )
     common.log(f"notification written status={status}")
 
-    result = {
+    result: common.JsonDict = {
         "status": "success",
         "counts": counts,
-        "artifacts": common.artifacts_for(run_dir, [
-            "output/notification.json",
-            "stages/notify.json",
-        ]),
+        "artifacts": common.artifacts_for(
+            run_dir,
+            [
+                "output/notification.json",
+                "stages/notify.json",
+            ],
+        ),
         "metrics": {"notificationStatus": status},
     }
     return result, 0

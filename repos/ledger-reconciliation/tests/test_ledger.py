@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ledger_reconciliation.ledger import create_ledger, _insert_rows
+from ledger_reconciliation.ledger import _insert_rows, create_ledger
 
 
 class TestIdempotentInsert(unittest.TestCase):
-    def test_duplicate_insert_is_noop(self):
+    def test_duplicate_insert_is_noop(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo_root = Path(tmp)
             (repo_root / "schema").mkdir()

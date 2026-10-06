@@ -1,0 +1,59 @@
+# Quality gates on every commit. Install once with:
+#   .venv/bin/pre-commit install
+# Run on demand with:
+#   .venv/bin/pre-commit run --all-files
+#
+# Tool versions match requirements-dev.txt. Fixtures are oracle data and must
+# never be rewritten by a hook, so they are excluded from every hook.
+exclude: ^(fixtures/|workspace/)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        language: python
+        additional_dependencies: ["mypy==2.4.0"]
+        entry: mypy
+        types: [python]
+        # mypy reads its file list from pyproject.toml; checking the whole
+        # estate keeps cross-module types consistent.
+        pass_filenames: false
+      - id: vulture
+        name: vulture (dead code)
+        language: python
+        additional_dependencies: ["vulture==2.16"]
+        entry: vulture
+        types: [python]
+        pass_filenames: false
+      - id: file-sizes
+        name: file size limits
+        language: script
+        entry: scripts/check-file-sizes.sh
+      - id: unit-tests-and-coverage
+        name: unit tests and coverage thresholds
+        language: script
+        entry: scripts/coverage.sh
+        files: ^repos/.*\.py$
+        pass_filenames: false

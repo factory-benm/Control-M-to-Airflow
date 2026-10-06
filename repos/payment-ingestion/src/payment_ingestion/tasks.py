@@ -3,6 +3,7 @@
 Owns the first three tasks of PAYOPS_CROSS_BORDER_RECONCILIATION:
   watch_inbound_files, verify_file_integrity, extract_payment_batch
 """
+
 import csv
 import json
 import shutil
@@ -11,17 +12,21 @@ from pathlib import Path
 
 from .common import (
     BusinessRuleError,
+    JsonDict,
     MissingUpstreamError,
+    StrPath,
     artifact_entry,
     ensure_dir,
     log,
-    read_jsonl,
     sha256_file,
     write_json,
     write_jsonl,
 )
 
 REPOSITORY = "payment-ingestion"
+
+# The CLI passes --attempt through as the raw string but parses PAYOPS_ATTEMPT to int.
+Attempt = int | str
 
 EXPECTED_HEADER = [
     "payment_id",
@@ -37,7 +42,9 @@ EXPECTED_HEADER = [
 ]
 
 
-def row_to_base_record(row, line_number, run_id, scenario, source_sha):
+def row_to_base_record(
+    row: list[str], line_number: int, run_id: str, scenario: str, source_sha: str
+) -> JsonDict:
     """Build the canonical base record (contract 4.4) from a CSV row list."""
     return {
         "amount": row[7],
@@ -57,10 +64,18 @@ def row_to_base_record(row, line_number, run_id, scenario, source_sha):
     }
 
 
-def watch_inbound_files(run_dir, run_id, scenario, kit_root, scenario_doc, now, attempt):
+def watch_inbound_files(
+    run_dir: StrPath,
+    run_id: str,
+    scenario: str,
+    kit_root: StrPath,
+    scenario_doc: JsonDict,
+    now: str,
+    attempt: Attempt,
+) -> JsonDict:
     """Task 1: deterministic wait-for-file simulation against the scenario
     input fixture. Bounded poll; no single sleep exceeds one second."""
-    rel_fixture = "fixtures/scenarios/{}/input/payments.csv".format(scenario)
+    rel_fixture = f"fixtures/scenarios/{scenario}/input/payments.csv"
     fixture_csv = Path(kit_root) / rel_fixture
     ensure_dir(Path(run_dir) / "stages")
 
@@ -69,7 +84,8 @@ def watch_inbound_files(run_dir, run_id, scenario, kit_root, scenario_doc, now, 
     detected = False
     byte_size = 0
     polls = 0
-    for polls in range(1, max_polls + 1):
+    while polls < max_polls:
+        polls += 1
         if fixture_csv.is_file():
             detected = True
             byte_size = fixture_csv.stat().st_size
@@ -79,7 +95,7 @@ def watch_inbound_files(run_dir, run_id, scenario, kit_root, scenario_doc, now, 
     if not detected:
         raise MissingUpstreamError("input file not detected: " + rel_fixture)
 
-    log("watch_inbound_files: detected {}".format(rel_fixture))
+    log(f"watch_inbound_files: detected {rel_fixture}")
     manifest = {
         "detectedFile": rel_fixture,
         "byteSize": byte_size,
@@ -103,18 +119,26 @@ def watch_inbound_files(run_dir, run_id, scenario, kit_root, scenario_doc, now, 
     }
 
 
-def verify_file_integrity(run_dir, run_id, scenario, kit_root, scenario_doc, now, attempt):
+def verify_file_integrity(
+    run_dir: StrPath,
+    run_id: str,
+    scenario: str,
+    kit_root: StrPath,
+    scenario_doc: JsonDict,
+    now: str,
+    attempt: Attempt,
+) -> JsonDict:
     """Task 2: SHA-256 the payments and reference ledger CSVs, copy them into
     the run directory as immutable inputs, and re-verify the copies."""
     src_payments = Path(kit_root) / "fixtures" / "scenarios" / scenario / "input" / "payments.csv"
     src_ledger = Path(kit_root) / "fixtures" / "scenarios" / scenario / "reference" / "ledger.csv"
     if not src_payments.is_file():
         raise MissingUpstreamError(
-            "missing source fixture: fixtures/scenarios/{}/input/payments.csv".format(scenario)
+            f"missing source fixture: fixtures/scenarios/{scenario}/input/payments.csv"
         )
     if not src_ledger.is_file():
         raise MissingUpstreamError(
-            "missing source fixture: fixtures/scenarios/{}/reference/ledger.csv".format(scenario)
+            f"missing source fixture: fixtures/scenarios/{scenario}/reference/ledger.csv"
         )
 
     ensure_dir(Path(run_dir) / "input")
@@ -134,19 +158,19 @@ def verify_file_integrity(run_dir, run_id, scenario, kit_root, scenario_doc, now
     if led_hash != sha256_file(src_ledger):
         raise BusinessRuleError("ledger.csv copy integrity check failed")
 
-    log("verify_file_integrity: payments={} ledger={}".format(pay_hash[:12], led_hash[:12]))
+    log(f"verify_file_integrity: payments={pay_hash[:12]} ledger={led_hash[:12]}")
     files = [
         {
             "path": "input/ledger.csv",
             "sha256": led_hash,
             "byteSize": led_size,
-            "source": "fixtures/scenarios/{}/reference/ledger.csv".format(scenario),
+            "source": f"fixtures/scenarios/{scenario}/reference/ledger.csv",
         },
         {
             "path": "input/payments.csv",
             "sha256": pay_hash,
             "byteSize": pay_size,
-            "source": "fixtures/scenarios/{}/input/payments.csv".format(scenario),
+            "source": f"fixtures/scenarios/{scenario}/input/payments.csv",
         },
     ]
     manifest = {"files": files, "runId": run_id, "scenario": scenario}
@@ -170,14 +194,22 @@ def verify_file_integrity(run_dir, run_id, scenario, kit_root, scenario_doc, now
     }
 
 
-def extract_payment_batch(run_dir, run_id, scenario, kit_root, scenario_doc, now, attempt):
+def extract_payment_batch(
+    run_dir: StrPath,
+    run_id: str,
+    scenario: str,
+    kit_root: StrPath,
+    scenario_doc: JsonDict,
+    now: str,
+    attempt: Attempt,
+) -> JsonDict:
     """Task 3: parse input/payments.csv, validate the header against contract
     section 1, and emit normalized base records as JSON Lines."""
     integrity_path = Path(run_dir) / "stages" / "file-integrity.json"
     if not integrity_path.is_file():
         raise MissingUpstreamError("missing upstream artifact: stages/file-integrity.json")
     integrity = json.loads(integrity_path.read_text(encoding="utf-8"))
-    source_sha = None
+    source_sha: str | None = None
     for entry in integrity["files"]:
         if entry["path"] == "input/payments.csv":
             source_sha = entry["sha256"]
@@ -190,7 +222,7 @@ def extract_payment_batch(run_dir, run_id, scenario, kit_root, scenario_doc, now
         raise MissingUpstreamError("missing upstream artifact: input/payments.csv")
 
     ensure_dir(Path(run_dir) / "stages")
-    records = []
+    records: list[JsonDict] = []
     with open(payments_path, newline="", encoding="utf-8") as f:
         reader = csv.reader(f)
         header = next(reader)
@@ -201,9 +233,7 @@ def extract_payment_batch(run_dir, run_id, scenario, kit_root, scenario_doc, now
             if not row:
                 continue
             line_number += 1
-            records.append(
-                row_to_base_record(row, line_number, run_id, scenario, source_sha)
-            )
+            records.append(row_to_base_record(row, line_number, run_id, scenario, source_sha))
 
     write_jsonl(Path(run_dir) / "stages" / "normalized-payments.jsonl", records)
     meta = {
@@ -215,7 +245,7 @@ def extract_payment_batch(run_dir, run_id, scenario, kit_root, scenario_doc, now
         "sourceFileSha256": source_sha,
     }
     write_json(Path(run_dir) / "stages" / "extract.json", meta)
-    log("extract_payment_batch: received={} rows".format(len(records)))
+    log(f"extract_payment_batch: received={len(records)} rows")
     artifacts = [
         artifact_entry(run_dir, "stages/extract.json"),
         artifact_entry(run_dir, "stages/normalized-payments.jsonl"),

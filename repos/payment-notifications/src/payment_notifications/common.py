@@ -10,11 +10,25 @@ import hashlib
 import json
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, TypedDict
 
 REPO_NAME = "payment-notifications"
 OWNED_TASKS = {"archive_and_notify"}
+
+JsonDict = dict[str, Any]
+
+
+class TaskContext(TypedDict):
+    run_dir: Path
+    kit_root: Path
+    repo_root: Path
+    scenario: str
+    scenario_cfg: JsonDict
+    run_id: str
+    now: str
+    attempt: int
 
 
 class UsageError(Exception):
@@ -53,14 +67,15 @@ def write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
-def read_json_optional(path: Path) -> dict | None:
+def read_json_optional(path: Path) -> JsonDict | None:
     if not path.exists():
         return None
-    return read_json(path)
+    doc: JsonDict = read_json(path)
+    return doc
 
 
-def artifacts_for(run_dir: Path, rel_paths: Iterable[str]) -> list[dict]:
-    items = []
+def artifacts_for(run_dir: Path, rel_paths: Iterable[str]) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
     for rel in rel_paths:
         p = run_dir / rel
         if not p.exists():
@@ -87,20 +102,22 @@ def resolve_kit_root(arg_kit_root: str | None, repo_root: Path) -> Path:
     raise UsageError("could not locate kit root (fixtures/)")
 
 
-def load_scenario(kit_root: Path, scenario: str) -> dict:
+def load_scenario(kit_root: Path, scenario: str) -> JsonDict:
     s = kit_root / "fixtures" / "scenarios" / scenario / "scenario.json"
     if not s.exists():
         raise UsageError(f"scenario not found: {scenario}")
-    return read_json(s)
+    doc: JsonDict = read_json(s)
+    return doc
 
 
-def resolve_now(arg_now: str | None, scenario_cfg: dict) -> str:
+def resolve_now(arg_now: str | None, scenario_cfg: JsonDict) -> str:
     if arg_now:
         return arg_now
     env = os.environ.get("PAYOPS_FIXED_CLOCK")
     if env:
         return env
-    return scenario_cfg["clock"]["fixedUtc"]
+    fixed: str = scenario_cfg["clock"]["fixedUtc"]
+    return fixed
 
 
 def resolve_attempt(arg_attempt: str | None) -> int:
@@ -118,5 +135,5 @@ def resolve_run_id(arg_run_id: str | None, run_dir: Path) -> str:
     return run_dir.name
 
 
-def emit_result(envelope: dict) -> None:
+def emit_result(envelope: JsonDict) -> None:
     sys.stdout.write(json.dumps(envelope, sort_keys=True, indent=2) + "\n")

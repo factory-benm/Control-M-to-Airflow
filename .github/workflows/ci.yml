@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The supported floor, and a current release that uses sys.monitoring
+        # for coverage instead of sys.settrace.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pinned dev tools
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes -r requirements-dev.txt
+
+      - name: Run every check
+        env:
+          # Lint is skippable locally when tools are missing; never in CI.
+          PAYOPS_REQUIRE_DEV_TOOLS: "1"
+        run: ./scripts/check.sh
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python-${{ matrix.python-version }}
+          path: workspace/coverage/
+          if-no-files-found: ignore

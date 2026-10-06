@@ -3,14 +3,18 @@
 Owns tasks 4 and 5 of PAYOPS_CROSS_BORDER_RECONCILIATION:
   validate_payment_schema, deduplicate_payments
 """
+
 import json
 import re
+from collections.abc import Container, Iterable
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from .common import (
-    BusinessRuleError,
+    JsonDict,
     MissingUpstreamError,
+    StrPath,
     artifact_entry,
     ensure_dir,
     log,
@@ -49,7 +53,7 @@ _FORMAT_CHECKS = {
 }
 
 
-def validate_row(row, allowlist):
+def validate_row(row: JsonDict, allowlist: Container[str]) -> tuple[str, str] | tuple[None, None]:
     """Apply contract 6.1 rules in order. Returns (reason_code, reason_detail)
     or (None, None) when the row is accepted."""
     # 1. MISSING_REQUIRED_FIELD
@@ -60,7 +64,7 @@ def validate_row(row, allowlist):
     # 2. MALFORMED_FIELD
     for field in FIELDS:
         if not _FORMAT_CHECKS[field].match(row[field]):
-            return "MALFORMED_FIELD", "field {} failed format".format(field)
+            return "MALFORMED_FIELD", f"field {field} failed format"
     # 3. CURRENCY_NOT_ALLOWED
     if row["currency"] not in allowlist:
         return "CURRENCY_NOT_ALLOWED", "currency {} not in allowlist".format(row["currency"])
@@ -74,13 +78,13 @@ def validate_row(row, allowlist):
     return None, None
 
 
-def deduplicate(records):
+def deduplicate(records: Iterable[JsonDict]) -> tuple[list[JsonDict], list[JsonDict]]:
     """Contract 6.2: keep the first occurrence of each payment_id in input
     file (line_number) order. Returns (accepted, duplicates)."""
     in_line_order = sorted(records, key=lambda r: r["line_number"])
-    seen = {}
-    accepted = []
-    duplicates = []
+    seen: dict[str, int] = {}
+    accepted: list[JsonDict] = []
+    duplicates: list[JsonDict] = []
     for r in in_line_order:
         pid = r["payment_id"]
         if pid in seen:
@@ -93,24 +97,32 @@ def deduplicate(records):
     return accepted, duplicates
 
 
-def validate_payment_schema(run_dir, run_id, scenario, kit_root, scenario_doc, now, attempt):
+def validate_payment_schema(
+    run_dir: StrPath,
+    run_id: str,
+    scenario: str,
+    kit_root: StrPath,
+    scenario_doc: dict[str, Any],
+    now: str,
+    attempt: int | str,
+) -> JsonDict:
     norm_path = Path(run_dir) / "stages" / "normalized-payments.jsonl"
     if not norm_path.is_file():
         raise MissingUpstreamError("missing upstream artifact: stages/normalized-payments.jsonl")
 
-    allowlist_rel = scenario_doc.get(
+    allowlist_rel: str = scenario_doc.get(
         "currencyAllowlist", "fixtures/fx/currency-allowlist.json"
     )
     allowlist_path = Path(kit_root) / allowlist_rel
     if not allowlist_path.is_file():
         raise MissingUpstreamError("missing currency allowlist: " + allowlist_rel)
-    allowlist_doc = json.loads(allowlist_path.read_text(encoding="utf-8"))
-    allowlist = set(allowlist_doc["currencies"])
+    allowlist_doc: JsonDict = json.loads(allowlist_path.read_text(encoding="utf-8"))
+    allowlist: set[str] = set(allowlist_doc["currencies"])
     allowlist_version = allowlist_doc["allowlistVersion"]
 
     records = read_jsonl(norm_path)
-    validated = []
-    rejections = []
+    validated: list[JsonDict] = []
+    rejections: list[JsonDict] = []
     for r in records:
         code, detail = validate_row(r, allowlist)
         if code:
@@ -131,9 +143,7 @@ def validate_payment_schema(run_dir, run_id, scenario, kit_root, scenario_doc, n
         "scenario": scenario,
     }
     write_json(Path(run_dir) / "stages" / "validate.json", meta)
-    log.info(
-        "validate_payment_schema: received=%d rejected=%d", len(records), len(rejections)
-    )
+    log.info("validate_payment_schema: received=%d rejected=%d", len(records), len(rejections))
     artifacts = [
         artifact_entry(run_dir, "stages/rejections.jsonl"),
         artifact_entry(run_dir, "stages/validate.json"),
@@ -153,7 +163,15 @@ def validate_payment_schema(run_dir, run_id, scenario, kit_root, scenario_doc, n
     }
 
 
-def deduplicate_payments(run_dir, run_id, scenario, kit_root, scenario_doc, now, attempt):
+def deduplicate_payments(
+    run_dir: StrPath,
+    run_id: str,
+    scenario: str,
+    kit_root: StrPath,
+    scenario_doc: dict[str, Any],
+    now: str,
+    attempt: int | str,
+) -> JsonDict:
     val_path = Path(run_dir) / "stages" / "validated-payments.jsonl"
     if not val_path.is_file():
         raise MissingUpstreamError("missing upstream artifact: stages/validated-payments.jsonl")

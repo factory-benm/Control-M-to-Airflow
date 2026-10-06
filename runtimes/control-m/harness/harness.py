@@ -37,8 +37,13 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from orchestrator.graph import TaskGraph
 
 RUNTIME_MODE = "compatibility-harness"
 MANIFEST_VERSION = "1.0.0"
@@ -58,13 +63,15 @@ CANONICAL_COUNTS = (
 
 RUN_SUBDIRS = ("input", "stages", "logs", "ledger", "output")
 
+JsonObject = dict[str, Any]
+
 
 class HarnessError(Exception):
     """A harness-level failure, distinct from a task failure."""
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def sha256_file(path: Path) -> str:
@@ -75,8 +82,9 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def load_json(path: Path) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+def load_json(path: Path) -> JsonObject:
+    document: JsonObject = json.loads(Path(path).read_text(encoding="utf-8"))
+    return document
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -87,28 +95,25 @@ def write_json(path: Path, payload: object) -> None:
     )
 
 
-def import_orchestrator_graph(repos_root: Path):
+def import_orchestrator_graph(repos_root: Path) -> ModuleType:
     """Load the orchestrator's graph parser from the estate itself."""
     src = repos_root / "payments-orchestrator" / "src"
     if not (src / "orchestrator" / "graph.py").is_file():
         raise HarnessError(
-            f"cannot find the orchestrator graph parser under {src}. "
-            "Check --repos-root."
+            f"cannot find the orchestrator graph parser under {src}. Check --repos-root."
         )
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
-    import orchestrator.graph as graph_module  # noqa: PLC0415
+    import orchestrator.graph as graph_module
 
     return graph_module
 
 
-def read_jsonl(path: Path) -> list[dict]:
+def read_jsonl(path: Path) -> list[JsonObject]:
     if not path.is_file():
         return []
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -120,8 +125,7 @@ def ledger_rows(run_dir: Path) -> tuple[int, int]:
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
         cursor = connection.execute(
-            "SELECT COUNT(*), COUNT(DISTINCT payment_id) FROM ledger_entry "
-            "WHERE state = 'posted'"
+            "SELECT COUNT(*), COUNT(DISTINCT payment_id) FROM ledger_entry WHERE state = 'posted'"
         )
         total, distinct = cursor.fetchone()
         return (int(total), int(distinct))
@@ -132,9 +136,15 @@ def ledger_rows(run_dir: Path) -> tuple[int, int]:
 
 
 class Harness:
-    def __init__(self, kit_root: Path, repos_root: Path, run_root: Path,
-                 scenario_id: str, run_id: str,
-                 workbench_note: dict | None = None) -> None:
+    def __init__(
+        self,
+        kit_root: Path,
+        repos_root: Path,
+        run_root: Path,
+        scenario_id: str,
+        run_id: str,
+        workbench_note: JsonObject | None = None,
+    ) -> None:
         self.kit_root = kit_root.resolve()
         self.repos_root = repos_root.resolve()
         self.run_dir = (run_root / run_id).resolve()
@@ -159,8 +169,8 @@ class Harness:
                 "the Control-M definition artifacts disagree, refusing to run:\n  "
                 + "\n  ".join(problems)
             )
-        self.graph = self.graph_module.canonical_graph(controlm)
-        self.task_commands = {
+        self.graph: TaskGraph = self.graph_module.canonical_graph(controlm)
+        self.task_commands: dict[str, JsonObject] = {
             entry["task"]: entry
             for entry in self.graph_module.load_task_commands(controlm / "task-commands.json")
         }
@@ -168,12 +178,12 @@ class Harness:
         if not self.wrapper.is_file():
             raise HarnessError(f"orchestrator wrapper not found at {self.wrapper}")
 
-        self.fixed_clock = self.scenario["clock"]["fixedUtc"]
-        self.fault = self.scenario.get("faultInjection")
-        self.rerun = self.scenario.get("rerun")
+        self.fixed_clock: str = self.scenario["clock"]["fixedUtc"]
+        self.fault: JsonObject | None = self.scenario.get("faultInjection")
+        self.rerun: JsonObject | None = self.scenario.get("rerun")
 
-        self.exit_sequence: list[dict] = []
-        self.passes: list[dict] = []
+        self.exit_sequence: list[JsonObject] = []
+        self.passes: list[JsonObject] = []
         self.counts: dict[str, int] = {}
         self.ledger_after_pass: list[int] = []
 
@@ -191,43 +201,50 @@ class Harness:
             (self.run_dir / name).mkdir(parents=True, exist_ok=True)
 
     def write_runtime_metadata(self) -> None:
-        write_json(self.run_dir / "runtime.json", {
-            "mode": RUNTIME_MODE,
-            "modeLabel": "Compatibility execution of the Control-M-defined workflow",
-            "isControlM": False,
-            "disclosure": (
-                "This run was produced by the deterministic compatibility harness, "
-                "not by BMC Control-M. It executes the same task graph and the same "
-                "repository commands declared in the Control-M definitions."
-            ),
-            "definitionSource": str(
-                Path("repos/payments-orchestrator/controlm/payments_reconciliation.json")
-            ),
-            "graph": {"tasks": len(self.graph.tasks), "edges": len(self.graph.edges)},
-            "workflow": WORKFLOW,
-            "scenario": self.scenario_id,
-            "runId": self.run_id,
-            "fixedClock": self.fixed_clock,
-            "host": {"platform": sys.platform, "architecture": os.uname().machine},
-            "workbench": self.workbench_note,
-            "selectedAt": utc_now(),
-            "harnessLimitations": [
-                "Does not implement Control-M scheduling, calendars as a scheduler service, "
-                "resource pools, SLA management, or agent orchestration.",
-                "Applies only the retry limits and conditions declared in the definitions.",
-                "Executes locally as the invoking user, not through a Control-M agent.",
-            ],
-        })
+        write_json(
+            self.run_dir / "runtime.json",
+            {
+                "mode": RUNTIME_MODE,
+                "modeLabel": "Compatibility execution of the Control-M-defined workflow",
+                "isControlM": False,
+                "disclosure": (
+                    "This run was produced by the deterministic compatibility harness, "
+                    "not by BMC Control-M. It executes the same task graph and the same "
+                    "repository commands declared in the Control-M definitions."
+                ),
+                "definitionSource": str(
+                    Path("repos/payments-orchestrator/controlm/payments_reconciliation.json")
+                ),
+                "graph": {"tasks": len(self.graph.tasks), "edges": len(self.graph.edges)},
+                "workflow": WORKFLOW,
+                "scenario": self.scenario_id,
+                "runId": self.run_id,
+                "fixedClock": self.fixed_clock,
+                "host": {"platform": sys.platform, "architecture": os.uname().machine},
+                "workbench": self.workbench_note,
+                "selectedAt": utc_now(),
+                "harnessLimitations": [
+                    "Does not implement Control-M scheduling, calendars as a scheduler service, "
+                    "resource pools, SLA management, or agent orchestration.",
+                    "Applies only the retry limits and conditions declared in the definitions.",
+                    "Executes locally as the invoking user, not through a Control-M agent.",
+                ],
+            },
+        )
 
     # -- execution --------------------------------------------------------
 
     def source_hashes(self) -> dict[str, str]:
         return {
-            "fixtures/input/payments.csv": sha256_file(self.scenario_dir / "input" / "payments.csv"),
-            "fixtures/reference/ledger.csv": sha256_file(self.scenario_dir / "reference" / "ledger.csv"),
+            "fixtures/input/payments.csv": sha256_file(
+                self.scenario_dir / "input" / "payments.csv"
+            ),
+            "fixtures/reference/ledger.csv": sha256_file(
+                self.scenario_dir / "reference" / "ledger.csv"
+            ),
         }
 
-    def run_task(self, task: str, attempt: int, pass_number: int) -> dict:
+    def run_task(self, task: str, attempt: int, pass_number: int) -> JsonObject:
         # Scope captures by pass as well as attempt. A declared rerun executes
         # the whole graph again with every task back at attempt 1, so attempt
         # alone would let the second pass overwrite the first pass's evidence.
@@ -237,48 +254,51 @@ class Harness:
         stderr_name = f"{task}.pass{pass_number}.attempt{attempt}.stderr"
         command = [
             str(self.wrapper),
-            "--task", task,
-            "--run-dir", str(self.run_dir),
-            "--scenario", self.scenario_id,
-            "--run-id", self.run_id,
-            "--kit-root", str(self.kit_root),
-            "--now", self.fixed_clock,
-            "--attempt", str(attempt),
+            "--task",
+            task,
+            "--run-dir",
+            str(self.run_dir),
+            "--scenario",
+            self.scenario_id,
+            "--run-id",
+            self.run_id,
+            "--kit-root",
+            str(self.kit_root),
+            "--now",
+            self.fixed_clock,
+            "--attempt",
+            str(attempt),
         ]
         environment = dict(os.environ)
-        environment.update({
-            "PAYOPS_KIT_ROOT": str(self.kit_root),
-            "PAYOPS_FIXED_CLOCK": self.fixed_clock,
-            "PAYOPS_ATTEMPT": str(attempt),
-            "PAYOPS_RUN_ID": self.run_id,
-            "PAYOPS_SCENARIO": self.scenario_id,
-        })
+        environment.update(
+            {
+                "PAYOPS_KIT_ROOT": str(self.kit_root),
+                "PAYOPS_FIXED_CLOCK": self.fixed_clock,
+                "PAYOPS_ATTEMPT": str(attempt),
+                "PAYOPS_RUN_ID": self.run_id,
+                "PAYOPS_SCENARIO": self.scenario_id,
+            }
+        )
 
         started = utc_now()
-        started_monotonic = datetime.now(timezone.utc)
+        started_monotonic = datetime.now(UTC)
         completed_process = subprocess.run(
             command, capture_output=True, text=True, env=environment, check=False
         )
         finished = utc_now()
-        duration_ms = int(
-            (datetime.now(timezone.utc) - started_monotonic).total_seconds() * 1000
-        )
+        duration_ms = int((datetime.now(UTC) - started_monotonic).total_seconds() * 1000)
 
-        (self.run_dir / "logs" / stdout_name).write_text(
-            completed_process.stdout, encoding="utf-8"
-        )
-        (self.run_dir / "logs" / stderr_name).write_text(
-            completed_process.stderr, encoding="utf-8"
-        )
+        (self.run_dir / "logs" / stdout_name).write_text(completed_process.stdout, encoding="utf-8")
+        (self.run_dir / "logs" / stderr_name).write_text(completed_process.stderr, encoding="utf-8")
 
-        result: dict | None = None
+        result: JsonObject | None = None
         if completed_process.stdout.strip():
             try:
                 result = json.loads(completed_process.stdout)
             except json.JSONDecodeError:
                 result = None
 
-        record = {
+        record: JsonObject = {
             "task": task,
             "repository": self.task_commands[task]["repository"],
             "pass": pass_number,
@@ -317,8 +337,8 @@ class Harness:
             and int(self.fault.get("attempt", 0)) == attempt
         )
 
-    def execute_pass(self, pass_number: int) -> dict:
-        tasks: list[dict] = []
+    def execute_pass(self, pass_number: int) -> JsonObject:
+        tasks: list[JsonObject] = []
         order = self.graph.topological_order()
         print(f"harness: pass {pass_number} executing {len(order)} tasks", file=sys.stderr)
 
@@ -333,9 +353,8 @@ class Harness:
                         self.counts[key] = value
                     break
 
-                expected = (
-                    record["exitCode"] == EXPECTED_FAULT_EXIT
-                    and self.fault_is_expected(task, attempt)
+                expected = record["exitCode"] == EXPECTED_FAULT_EXIT and self.fault_is_expected(
+                    task, attempt
                 )
                 if not expected:
                     raise HarnessError(
@@ -345,8 +364,7 @@ class Harness:
                     )
                 if attempt > retry_limit:
                     raise HarnessError(
-                        f"{task} hit its declared retry limit of {retry_limit} "
-                        "without completing"
+                        f"{task} hit its declared retry limit of {retry_limit} without completing"
                     )
                 print(
                     f"harness: {task} attempt {attempt} raised the declared "
@@ -361,16 +379,20 @@ class Harness:
 
     # -- observations -----------------------------------------------------
 
-    def observed_invariants(self, before: dict[str, str], after: dict[str, str]) -> list[dict]:
-        results: list[dict] = []
+    def observed_invariants(
+        self, before: dict[str, str], after: dict[str, str]
+    ) -> list[JsonObject]:
+        results: list[JsonObject] = []
 
         def record(identifier: str, ok: bool, detail: str) -> None:
-            results.append({
-                "id": identifier,
-                "status": "pass" if ok else "fail",
-                "detail": detail,
-                "provenance": "observed-run",
-            })
+            results.append(
+                {
+                    "id": identifier,
+                    "status": "pass" if ok else "fail",
+                    "detail": detail,
+                    "provenance": "observed-run",
+                }
+            )
 
         counts = self.counts
         missing = [key for key in CANONICAL_COUNTS if key not in counts]
@@ -393,7 +415,8 @@ class Harness:
         record(
             "INV-INPUT-IMMUTABLE",
             before == after,
-            "source fixture hashes unchanged" if before == after
+            "source fixture hashes unchanged"
+            if before == after
             else f"source fixture changed during the run: {before} -> {after}",
         )
 
@@ -401,7 +424,8 @@ class Harness:
         record(
             "INV-SINGLE-POSTING",
             total == distinct and total == counts.get("posted", -1),
-            f"ledger rows={total} distinct payment_id={distinct} posted count={counts.get('posted')}",
+            f"ledger rows={total} distinct payment_id={distinct} "
+            f"posted count={counts.get('posted')}",
         )
 
         cutoff_records = read_jsonl(self.run_dir / "stages" / "cutoff-payments.jsonl")
@@ -419,8 +443,12 @@ class Harness:
             "source hash, and payment_id",
         )
 
-        matched_ids = {row["payment_id"] for row in read_jsonl(self.run_dir / "stages" / "matched.jsonl")}
-        break_ids = {row["payment_id"] for row in read_jsonl(self.run_dir / "stages" / "breaks.jsonl")}
+        matched_ids = {
+            row["payment_id"] for row in read_jsonl(self.run_dir / "stages" / "matched.jsonl")
+        }
+        break_ids = {
+            row["payment_id"] for row in read_jsonl(self.run_dir / "stages" / "breaks.jsonl")
+        }
         overlap = matched_ids & break_ids
         record(
             "INV-BREAKS-EXCLUDED",
@@ -488,7 +516,7 @@ class Harness:
 
     # -- orchestration ----------------------------------------------------
 
-    def run(self, fresh: bool = True) -> dict:
+    def run(self, fresh: bool = True) -> JsonObject:
         started = utc_now()
         self.prepare_run_dir(fresh)
         self.write_runtime_metadata()
@@ -509,7 +537,7 @@ class Harness:
             print(f"harness: {error}", file=sys.stderr)
 
         after = self.source_hashes()
-        manifest = {
+        manifest: JsonObject = {
             "manifestVersion": MANIFEST_VERSION,
             "workflow": WORKFLOW,
             "runId": self.run_id,
@@ -549,14 +577,12 @@ def main() -> int:
     parser.add_argument(
         "--repos-root",
         type=Path,
-        help="Directory holding the eight repositories. "
-             "Defaults to <kit-root>/repos.",
+        help="Directory holding the eight repositories. Defaults to <kit-root>/repos.",
     )
     parser.add_argument(
         "--run-root",
         type=Path,
-        help="Where run directories are created. "
-             "Defaults to <kit-root>/workspace/runtime/runs.",
+        help="Where run directories are created. Defaults to <kit-root>/workspace/runtime/runs.",
     )
     parser.add_argument(
         "--keep-existing",
@@ -588,9 +614,7 @@ def main() -> int:
         print(f"harness: {error}", file=sys.stderr)
         return 1
 
-    failed_invariants = [
-        item["id"] for item in manifest["invariants"] if item["status"] != "pass"
-    ]
+    failed_invariants = [item["id"] for item in manifest["invariants"] if item["status"] != "pass"]
     print(
         f"harness: scenario={manifest['scenario']} status={manifest['status']} "
         f"mode={RUNTIME_MODE} counts={manifest['counts']}",

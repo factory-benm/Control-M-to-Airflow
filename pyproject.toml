@@ -1,0 +1,110 @@
+# Tool configuration for the whole estate. This is not a package: the services
+# run in place with PYTHONPATH=src and stay standard-library only. The tools
+# configured here are development-only and pinned in requirements-dev.txt.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["workspace"]
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes: unused imports and variables, undefined names
+  "I",    # import order
+  "N",    # pep8-naming: snake_case functions, CapWords classes, UPPER_CASE constants
+  "B",    # bugbear: likely bugs
+  "UP",   # pyupgrade for the 3.11 floor
+  "C90",  # mccabe cyclomatic complexity
+  "SIM",  # simplifications
+  "RUF",  # ruff-specific checks
+  "PLR0912",  # too many branches
+  "PLR0915",  # too many statements
+  "PLW",  # pylint warnings
+  "TD",   # TODO comments must be well-formed and link an issue
+  "FIX001", "FIX003", "FIX004",  # no FIXME, XXX, or HACK markers; use a linked TODO
+]
+ignore = [
+  "TD002",  # author tag on TODOs; the linked issue carries ownership
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Vulture whitelists are bare attribute references on an undefined "_".
+"vulture_whitelist.py" = ["F821", "B018"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-branches = 12
+max-statements = 50
+
+[tool.ruff.lint.isort]
+known-first-party = [
+  "exception_management",
+  "fx_enrichment",
+  "ledger_reconciliation",
+  "payment_ingestion",
+  "payment_notifications",
+  "payment_validation",
+  "orchestrator",
+  "settlement_reporting",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+mypy_path = [
+  "repos/exception-management/src",
+  "repos/fx-enrichment/src",
+  "repos/ledger-reconciliation/src",
+  "repos/payment-ingestion/src",
+  "repos/payment-notifications/src",
+  "repos/payment-validation/src",
+  "repos/payments-orchestrator/src",
+  "repos/settlement-reporting/src",
+]
+files = [
+  "repos/*/src",
+  "repos/*/tests",
+  "runtimes/control-m/harness",
+  "scripts/lib",
+]
+
+[tool.pytest.ini_options]
+# The suites are plain unittest; pytest is an optional runner for them. The
+# default import mode puts each tests/ directory on sys.path, as unittest
+# discovery does, so test module names must be unique across repositories
+# (mypy enforces the same).
+testpaths = ["repos"]
+# Matches the PYTHONPATH=src each repository's scripts/test.sh sets.
+pythonpath = [
+  "repos/exception-management/src",
+  "repos/fx-enrichment/src",
+  "repos/ledger-reconciliation/src",
+  "repos/payment-ingestion/src",
+  "repos/payment-notifications/src",
+  "repos/payment-validation/src",
+  "repos/payments-orchestrator/src",
+  "repos/settlement-reporting/src",
+]
+
+[tool.vulture]
+min_confidence = 60
+paths = [
+  "repos",
+  "runtimes/control-m/harness",
+  "scripts/lib",
+  "vulture_whitelist.py",
+]
+exclude = ["workspace/"]
+
+[tool.payops.coverage]
+# Minimum statement coverage per service repository, enforced by
+# scripts/coverage.sh (part of scripts/check.sh). Raise it, never lower it.
+fail_under = 95

@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ElementTree
+from itertools import pairwise
 from pathlib import Path
+from typing import Any
 
 CONDITION_PREFIX = "PAYOPS-"
 CONDITION_SUFFIX = "-OK"
@@ -42,6 +44,8 @@ _NON_JOB_FOLDER_KEYS = {
 
 _FLOW_TYPE = "Flow"
 
+JsonObject = dict[str, Any]
+
 
 class GraphError(Exception):
     """Raised when a definition cannot be parsed into a usable graph."""
@@ -50,15 +54,22 @@ class GraphError(Exception):
 class TaskGraph:
     """A canonical, comparable view of the workflow."""
 
-    def __init__(self, source: str, tasks: list[str], edges: set[tuple[str, str]],
-                 retries: dict[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        source: str,
+        tasks: list[str],
+        edges: set[tuple[str, str]],
+        retries: dict[str, int] | None = None,
+    ) -> None:
         self.source = source
         self.tasks = list(tasks)
         self.edges = set(edges)
         self.retries = dict(retries or {})
 
     def __repr__(self) -> str:
-        return f"TaskGraph(source={self.source!r}, tasks={len(self.tasks)}, edges={len(self.edges)})"
+        return (
+            f"TaskGraph(source={self.source!r}, tasks={len(self.tasks)}, edges={len(self.edges)})"
+        )
 
     @property
     def task_set(self) -> set[str]:
@@ -77,9 +88,7 @@ class TaskGraph:
         while remaining:
             ready = sorted(task for task, deps in remaining.items() if not deps)
             if not ready:
-                raise GraphError(
-                    f"{self.source}: dependency cycle among {sorted(remaining)}"
-                )
+                raise GraphError(f"{self.source}: dependency cycle among {sorted(remaining)}")
             for task in ready:
                 order.append(task)
                 del remaining[task]
@@ -87,7 +96,7 @@ class TaskGraph:
                 deps.difference_update(ready)
         return order
 
-    def differences(self, other: "TaskGraph") -> list[str]:
+    def differences(self, other: TaskGraph) -> list[str]:
         """Human-readable differences against another graph. Empty means agreement."""
         problems: list[str] = []
 
@@ -120,7 +129,7 @@ def condition_for(task: str) -> str:
     return f"{CONDITION_PREFIX}{task.upper()}{CONDITION_SUFFIX}"
 
 
-def _events(job: dict, key: str) -> list[str]:
+def _events(job: JsonObject, key: str) -> list[str]:
     block = job.get(key)
     if not isinstance(block, dict):
         return []
@@ -131,21 +140,19 @@ def _events(job: dict, key: str) -> list[str]:
     ]
 
 
-def graph_from_json(path: Path) -> TaskGraph:
-    """Build the graph from Automation API jobs-as-code.
-
-    Edges come from event conditions: a task that waits for a condition depends
-    on the task that adds it. The declared ``Flow`` sequence is cross-checked
-    against those edges.
-    """
+def _load_workflow_folder(path: Path) -> JsonObject:
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     folder = document.get(WORKFLOW_NAME)
     if not isinstance(folder, dict):
         raise GraphError(f"{path}: folder {WORKFLOW_NAME} not found")
     if folder.get("Type") != "Folder":
         raise GraphError(f"{path}: {WORKFLOW_NAME} is not a Folder")
+    return folder
 
-    jobs: dict[str, dict] = {}
+
+def _split_folder(folder: JsonObject) -> tuple[dict[str, JsonObject], list[list[str]]]:
+    """Separate a folder's jobs from its ``Flow`` sequences, ignoring folder settings."""
+    jobs: dict[str, JsonObject] = {}
     flow_sequences: list[list[str]] = []
     for name, value in folder.items():
         if name in _NON_JOB_FOLDER_KEYS or not isinstance(value, dict):
@@ -155,48 +162,76 @@ def graph_from_json(path: Path) -> TaskGraph:
             continue
         if str(value.get("Type", "")).startswith("Job:"):
             jobs[name] = value
+    return jobs, flow_sequences
 
-    if not jobs:
-        raise GraphError(f"{path}: no jobs found in {WORKFLOW_NAME}")
 
+def _condition_producers(path: Path, jobs: dict[str, JsonObject]) -> dict[str, str]:
     produced_by: dict[str, str] = {}
     for name, job in jobs.items():
         for event in _events(job, "eventsToAdd"):
             if event in produced_by:
                 raise GraphError(
-                    f"{path}: condition {event} is added by both "
-                    f"{produced_by[event]} and {name}"
+                    f"{path}: condition {event} is added by both {produced_by[event]} and {name}"
                 )
             produced_by[event] = name
+    return produced_by
 
+
+def _event_edges(
+    path: Path, jobs: dict[str, JsonObject], produced_by: dict[str, str]
+) -> set[tuple[str, str]]:
     edges: set[tuple[str, str]] = set()
     for name, job in jobs.items():
         for event in _events(job, "eventsToWaitFor"):
             producer = produced_by.get(event)
             if producer is None:
-                raise GraphError(
-                    f"{path}: {name} waits for {event} which no job adds"
-                )
+                raise GraphError(f"{path}: {name} waits for {event} which no job adds")
             edges.add((producer, name))
+    return edges
 
+
+def _rerun_limits(jobs: dict[str, JsonObject]) -> dict[str, int]:
     retries: dict[str, int] = {}
     for name, job in jobs.items():
         limit = job.get("RerunLimit", {})
         retries[name] = int(limit.get("Times", 0)) if isinstance(limit, dict) else 0
+    return retries
 
-    graph = TaskGraph(f"json:{Path(path).name}", sorted(jobs), edges, retries)
 
+def _check_flow_sequences(
+    path: Path,
+    flow_sequences: list[list[str]],
+    jobs: dict[str, JsonObject],
+    edges: set[tuple[str, str]],
+) -> None:
     for sequence in flow_sequences:
         missing = [task for task in sequence if task not in jobs]
         if missing:
             raise GraphError(f"{path}: Flow references unknown jobs {missing}")
-        for earlier, later in zip(sequence, sequence[1:]):
+        for earlier, later in pairwise(sequence):
             if (earlier, later) not in edges:
                 raise GraphError(
                     f"{path}: Flow declares {earlier} -> {later} but no event "
                     "condition creates that dependency"
                 )
 
+
+def graph_from_json(path: Path) -> TaskGraph:
+    """Build the graph from Automation API jobs-as-code.
+
+    Edges come from event conditions: a task that waits for a condition depends
+    on the task that adds it. The declared ``Flow`` sequence is cross-checked
+    against those edges.
+    """
+    folder = _load_workflow_folder(path)
+    jobs, flow_sequences = _split_folder(folder)
+    if not jobs:
+        raise GraphError(f"{path}: no jobs found in {WORKFLOW_NAME}")
+
+    produced_by = _condition_producers(path, jobs)
+    edges = _event_edges(path, jobs, produced_by)
+    graph = TaskGraph(f"json:{Path(path).name}", sorted(jobs), edges, _rerun_limits(jobs))
+    _check_flow_sequences(path, flow_sequences, jobs, edges)
     return graph
 
 
@@ -212,34 +247,34 @@ def graph_from_xml(path: Path) -> TaskGraph:
         raise GraphError(f"{path}: no JOB elements found")
 
     produced_by: dict[str, str] = {}
+    named_jobs: list[tuple[str, ElementTree.Element]] = []
     for job in jobs:
         name = job.get("JOBNAME")
         if not name:
             raise GraphError(f"{path}: a JOB element has no JOBNAME")
+        named_jobs.append((name, job))
         for outcond in job.findall("OUTCOND"):
-            if outcond.get("SIGN") == "+" and outcond.get("NAME"):
-                produced_by[outcond.get("NAME")] = name
+            produced = outcond.get("NAME")
+            if outcond.get("SIGN") == "+" and produced:
+                produced_by[produced] = name
 
     edges: set[tuple[str, str]] = set()
     retries: dict[str, int] = {}
     names: list[str] = []
-    for job in jobs:
-        name = job.get("JOBNAME")
+    for name, job in named_jobs:
         names.append(name)
         retries[name] = int(job.get("MAXRERUN", "0") or 0)
         for incond in job.findall("INCOND"):
             condition = incond.get("NAME")
-            producer = produced_by.get(condition)
+            producer = produced_by.get(condition) if condition else None
             if producer is None:
-                raise GraphError(
-                    f"{path}: {name} requires {condition} which no job produces"
-                )
+                raise GraphError(f"{path}: {name} requires {condition} which no job produces")
             edges.add((producer, name))
 
     return TaskGraph(f"xml:{Path(path).name}", sorted(names), edges, retries)
 
 
-def load_task_commands(path: Path) -> list[dict]:
+def load_task_commands(path: Path) -> list[JsonObject]:
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     tasks = document.get("tasks")
     if not isinstance(tasks, list) or not tasks:
@@ -251,9 +286,7 @@ def graph_from_task_commands(path: Path) -> TaskGraph:
     tasks = load_task_commands(path)
     names = [task["task"] for task in tasks]
     edges = {
-        (dependency, task["task"])
-        for task in tasks
-        for dependency in task.get("dependsOn", [])
+        (dependency, task["task"]) for task in tasks for dependency in task.get("dependsOn", [])
     }
     retries = {task["task"]: int(task.get("retryLimit", 0)) for task in tasks}
     return TaskGraph(f"task-commands:{Path(path).name}", sorted(names), edges, retries)
@@ -262,7 +295,8 @@ def graph_from_task_commands(path: Path) -> TaskGraph:
 def repository_for_task(path: Path, task: str) -> str:
     for entry in load_task_commands(path):
         if entry["task"] == task:
-            return entry["repository"]
+            repository: str = entry["repository"]
+            return repository
     raise GraphError(f"{path}: task {task} is not defined")
 
 

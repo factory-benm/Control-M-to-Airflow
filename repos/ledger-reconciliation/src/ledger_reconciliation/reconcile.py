@@ -10,15 +10,14 @@ from __future__ import annotations
 import csv
 import sqlite3
 from pathlib import Path
-from typing import Any
 
 from . import common
 
 
-def _load_reference(ref_path: Path) -> dict[str, dict]:
+def _load_reference(ref_path: Path) -> dict[str, dict[str, str]]:
     if not ref_path.exists():
         raise common.MissingUpstreamError(f"reference ledger not found: {ref_path}")
-    ref: dict[str, dict] = {}
+    ref: dict[str, dict[str, str]] = {}
     with ref_path.open("r", encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
         for row in reader:
@@ -30,7 +29,7 @@ def _load_reference(ref_path: Path) -> dict[str, dict]:
     return ref
 
 
-def _load_posted(db_path: Path) -> list[dict]:
+def _load_posted(db_path: Path) -> list[common.JsonObject]:
     if not db_path.exists():
         raise common.MissingUpstreamError(f"ledger not found: {db_path}")
     conn = sqlite3.connect(str(db_path))
@@ -53,7 +52,9 @@ def _load_line_numbers(cutoff_path: Path) -> dict[str, int]:
     return {r["payment_id"]: r["line_number"] for r in records}
 
 
-def _evaluate(posted: dict, reference: dict | None) -> tuple[str, dict]:
+def _evaluate(
+    posted: common.JsonObject, reference: dict[str, str] | None
+) -> tuple[str, dict[str, str | None]]:
     """Return (reason_code_or_matched, break_detail)."""
     if reference is None:
         return "MISSING_LEDGER_REFERENCE", {
@@ -90,10 +91,10 @@ def _evaluate(posted: dict, reference: dict | None) -> tuple[str, dict]:
     return "matched", {}
 
 
-def run(ctx: dict) -> tuple[dict, int]:
-    run_dir: Path = ctx["run_dir"]
-    scenario: str = ctx["scenario"]
-    run_id: str = ctx["run_id"]
+def run(ctx: common.TaskContext) -> tuple[common.JsonObject, int]:
+    run_dir = ctx["run_dir"]
+    scenario = ctx["scenario"]
+    run_id = ctx["run_id"]
 
     db_path = run_dir / "ledger" / "ledger.sqlite3"
     ref_path = run_dir / "input" / "ledger.csv"
@@ -105,14 +106,14 @@ def run(ctx: dict) -> tuple[dict, int]:
     reference = _load_reference(ref_path)
     line_numbers = _load_line_numbers(cutoff_path)
 
-    matched_records: list[dict] = []
-    break_records: list[dict] = []
+    matched_records: list[common.JsonObject] = []
+    break_records: list[common.JsonObject] = []
 
     for row in posted_rows:
         payment_id = row["payment_id"]
         ref_row = reference.get(row["ledger_reference"])
         outcome, detail = _evaluate(row, ref_row)
-        base = {
+        base: common.JsonObject = {
             "payment_id": payment_id,
             "run_id": row["run_id"],
             "scenario": row["scenario"],
@@ -143,31 +144,37 @@ def run(ctx: dict) -> tuple[dict, int]:
     reconciliation_json = run_dir / "stages" / "reconciliation.json"
     common.write_jsonl(matched_jsonl, matched_records)
     common.write_jsonl(breaks_jsonl, break_records)
-    common.write_json(reconciliation_json, {
-        "scenario": scenario,
-        "runId": run_id,
-        "counts": {
-            "matched": len(matched_records),
-            "broken": len(break_records),
+    common.write_json(
+        reconciliation_json,
+        {
+            "scenario": scenario,
+            "runId": run_id,
+            "counts": {
+                "matched": len(matched_records),
+                "broken": len(break_records),
+            },
+            "metrics": {
+                "posted": len(posted_rows),
+                "referenceRows": len(reference),
+            },
         },
-        "metrics": {
-            "posted": len(posted_rows),
-            "referenceRows": len(reference),
-        },
-    })
+    )
     common.log(f"matched={len(matched_records)} broken={len(break_records)}")
 
-    result = {
+    result: common.JsonObject = {
         "status": "success",
         "counts": {
             "matched": len(matched_records),
             "broken": len(break_records),
         },
-        "artifacts": common.artifacts_for(run_dir, [
-            "stages/matched.jsonl",
-            "stages/breaks.jsonl",
-            "stages/reconciliation.json",
-        ]),
+        "artifacts": common.artifacts_for(
+            run_dir,
+            [
+                "stages/matched.jsonl",
+                "stages/breaks.jsonl",
+                "stages/reconciliation.json",
+            ],
+        ),
         "metrics": {"posted": len(posted_rows), "referenceRows": len(reference)},
     }
     return result, 0

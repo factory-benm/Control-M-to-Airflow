@@ -7,8 +7,13 @@ import os
 import sys
 from pathlib import Path
 
-from . import common
-from . import notify
+from . import common, notify
+
+USAGE = (
+    "Usage: ./scripts/run-task.sh --run-dir <abs> --scenario <name> "
+    "--task <task> [--kit-root <abs>] [--run-id <id>] "
+    "[--now <iso8601-utc>] [--attempt <n>]\n"
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -31,17 +36,8 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-    if args.help:
-        sys.stderr.write(
-            "Usage: ./scripts/run-task.sh --run-dir <abs> --scenario <name> "
-            "--task <task> [--kit-root <abs>] [--run-id <id>] "
-            "[--now <iso8601-utc>] [--attempt <n>]\n"
-        )
-        return 0
-
-    envelope: dict = {
+def _initial_envelope(args: argparse.Namespace) -> common.JsonDict:
+    return {
         "repository": common.REPO_NAME,
         "task": args.task or "",
         "runId": "",
@@ -51,55 +47,96 @@ def main(argv: list[str] | None = None) -> int:
         "completedAt": "",
     }
 
-    def fail(code, status, err_code, message):
-        envelope.update({
-            "status": status, "exitCode": code, "counts": {}, "artifacts": [],
-            "metrics": {}, "error": {"code": err_code, "message": message},
-        })
-        common.emit_result(envelope)
-        return code
 
+def _fail(envelope: common.JsonDict, code: int, err_code: str, message: str) -> int:
+    envelope.update(
+        {
+            "status": "failed",
+            "exitCode": code,
+            "counts": {},
+            "artifacts": [],
+            "metrics": {},
+            "error": {"code": err_code, "message": message},
+        }
+    )
+    common.emit_result(envelope)
+    return code
+
+
+def _argument_error(args: argparse.Namespace) -> str | None:
     if not args.run_dir or not args.scenario or not args.task:
-        return fail(2, "failed", "USAGE", "missing required argument(s): --run-dir, --scenario, --task")
+        return "missing required argument(s): --run-dir, --scenario, --task"
     run_dir = Path(args.run_dir).resolve()
     if not run_dir.is_dir():
-        return fail(2, "failed", "USAGE", f"run-dir is not a directory: {run_dir}")
+        return f"run-dir is not a directory: {run_dir}"
     if args.task not in common.OWNED_TASKS:
-        return fail(2, "failed", "USAGE", f"task not owned by {common.REPO_NAME}: {args.task}")
+        return f"task not owned by {common.REPO_NAME}: {args.task}"
+    return None
 
-    repo_root = _repo_root()
+
+def _execute(envelope: common.JsonDict, task: str, ctx: common.TaskContext) -> int:
     try:
-        kit_head = common.resolve_kit_root(args.kit_root, repo_root)
-        scenario_cfg = common.load_scenario(kit_head, args.scenario)
-    except common.UsageError as e:
-        return fail(2, "failed", "USAGE", str(e))
-
-    now = common.resolve_now(args.now, scenario_cfg)
-    attempt = common.resolve_attempt(args.attempt)
-    run_id = common.resolve_run_id(args.run_id, run_dir)
-    envelope.update({"runId": run_id, "scenario": args.scenario, "attempt": attempt,
-                     "startedAt": now, "completedAt": now})
-
-    ctx = {"run_dir": run_dir, "kit_root": kit_head, "repo_root": repo_root,
-           "scenario": args.scenario, "scenario_cfg": scenario_cfg,
-           "run_id": run_id, "now": now, "attempt": attempt}
-
-    try:
-        if args.task == "archive_and_notify":
+        if task == "archive_and_notify":
             task_result, exit_code = notify.run(ctx)
         else:
-            return fail(2, "failed", "USAGE", f"task not owned: {args.task}")
+            return _fail(envelope, 2, "USAGE", f"task not owned: {task}")
     except common.MissingUpstreamError as e:
-        return fail(5, "failed", "MISSING_UPSTREAM_ARTIFACT", str(e))
+        return _fail(envelope, 5, "MISSING_UPSTREAM_ARTIFACT", str(e))
     except common.BusinessRuleError as e:
-        return fail(4, "failed", e.code, str(e))
+        return _fail(envelope, 4, e.code, str(e))
     except Exception:
-        return fail(1, "failed", "INTERNAL", "unexpected error")
+        return _fail(envelope, 1, "INTERNAL", "unexpected error")
 
     envelope.update(task_result)
     envelope["exitCode"] = exit_code
     common.emit_result(envelope)
     return exit_code
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    if args.help:
+        sys.stderr.write(USAGE)
+        return 0
+
+    envelope = _initial_envelope(args)
+    argument_error = _argument_error(args)
+    if argument_error is not None:
+        return _fail(envelope, 2, "USAGE", argument_error)
+    run_dir = Path(args.run_dir).resolve()
+    scenario: str = args.scenario
+
+    repo_root = _repo_root()
+    try:
+        kit_head = common.resolve_kit_root(args.kit_root, repo_root)
+        scenario_cfg = common.load_scenario(kit_head, scenario)
+    except common.UsageError as e:
+        return _fail(envelope, 2, "USAGE", str(e))
+
+    now = common.resolve_now(args.now, scenario_cfg)
+    attempt = common.resolve_attempt(args.attempt)
+    run_id = common.resolve_run_id(args.run_id, run_dir)
+    envelope.update(
+        {
+            "runId": run_id,
+            "scenario": scenario,
+            "attempt": attempt,
+            "startedAt": now,
+            "completedAt": now,
+        }
+    )
+
+    ctx: common.TaskContext = {
+        "run_dir": run_dir,
+        "kit_root": kit_head,
+        "repo_root": repo_root,
+        "scenario": scenario,
+        "scenario_cfg": scenario_cfg,
+        "run_id": run_id,
+        "now": now,
+        "attempt": attempt,
+    }
+    return _execute(envelope, args.task, ctx)
 
 
 if __name__ == "__main__":

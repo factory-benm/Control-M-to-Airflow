@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any
 
 from . import common
 
@@ -34,9 +33,7 @@ def create_ledger(db_path: Path, repo_root: Path) -> None:
 def posted_payment_ids(db_path: Path) -> set[str]:
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute(
-            "SELECT payment_id FROM ledger_entry WHERE state = 'posted'"
-        )
+        cur = conn.execute("SELECT payment_id FROM ledger_entry WHERE state = 'posted'")
         return {row[0] for row in cur.fetchall()}
     finally:
         conn.close()
@@ -45,15 +42,14 @@ def posted_payment_ids(db_path: Path) -> set[str]:
 def count_posted(db_path: Path) -> int:
     conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.execute(
-            "SELECT COUNT(*) FROM ledger_entry WHERE state = 'posted'"
-        )
-        return cur.fetchone()[0]
+        cur = conn.execute("SELECT COUNT(*) FROM ledger_entry WHERE state = 'posted'")
+        count: int = cur.fetchone()[0]
+        return count
     finally:
         conn.close()
 
 
-def _insert_rows(db_path: Path, rows: list[dict], posted_at_logical: str) -> int:
+def _insert_rows(db_path: Path, rows: list[common.JsonObject], posted_at_logical: str) -> int:
     """Insert rows with ON CONFLICT DO NOTHING inside one transaction.
 
     Returns the number of rows actually inserted (not already present).
@@ -94,8 +90,8 @@ def _insert_rows(db_path: Path, rows: list[dict], posted_at_logical: str) -> int
         conn.close()
 
 
-def _fault_for_scenario(scenario_cfg: dict) -> dict | None:
-    fault = scenario_cfg.get("faultInjection")
+def _fault_for_scenario(scenario_cfg: common.JsonObject) -> common.JsonObject | None:
+    fault: common.JsonObject | None = scenario_cfg.get("faultInjection")
     if not fault:
         return None
     if fault.get("task") != "post_pending_ledger":
@@ -103,12 +99,12 @@ def _fault_for_scenario(scenario_cfg: dict) -> dict | None:
     return fault
 
 
-def run(ctx: dict) -> tuple[dict, int]:
-    run_dir: Path = ctx["run_dir"]
-    repo_root: Path = ctx["repo_root"]
-    scenario_cfg: dict = ctx["scenario_cfg"]
-    now: str = ctx["now"]
-    attempt: int = ctx["attempt"]
+def run(ctx: common.TaskContext) -> tuple[common.JsonObject, int]:
+    run_dir = ctx["run_dir"]
+    repo_root = ctx["repo_root"]
+    scenario_cfg = ctx["scenario_cfg"]
+    now = ctx["now"]
+    attempt = ctx["attempt"]
 
     cutoff_path = run_dir / "stages" / "cutoff-payments.jsonl"
     common.log(f"reading {cutoff_path}")
@@ -130,27 +126,38 @@ def run(ctx: dict) -> tuple[dict, int]:
         first_n = [r for r in payments_sorted[:after_writes] if r["payment_id"] not in already]
         inserted = _insert_rows(db_path, first_n, now)
         posted = count_posted(db_path)
-        common.log(f"INJECTED FAULT attempt={attempt} committed={posted} (afterWrites={after_writes})")
+        common.log(
+            f"INJECTED FAULT attempt={attempt} committed={posted} (afterWrites={after_writes})"
+        )
         posting_json = run_dir / "stages" / "ledger-posting.json"
-        common.write_json(posting_json, {
-            "scenario": ctx["scenario"],
-            "runId": ctx["run_id"],
-            "attempt": attempt,
-            "fault": {
-                "reasonCode": fault.get("reasonCode", "INJECTED_LEDGER_FAULT"),
-                "afterWrites": after_writes,
-                "attempt": fault_attempt,
+        common.write_json(
+            posting_json,
+            {
+                "scenario": ctx["scenario"],
+                "runId": ctx["run_id"],
+                "attempt": attempt,
+                "fault": {
+                    "reasonCode": fault.get("reasonCode", "INJECTED_LEDGER_FAULT"),
+                    "afterWrites": after_writes,
+                    "attempt": fault_attempt,
+                },
+                "counts": {"posted": posted},
+                "metrics": {
+                    "inserted": inserted,
+                    "alreadyPosted": len(first_n) - inserted + len(already),
+                },
             },
-            "counts": {"posted": posted},
-            "metrics": {"inserted": inserted, "alreadyPosted": len(first_n) - inserted + len(already)},
-        })
-        result = {
+        )
+        result: common.JsonObject = {
             "status": "failed",
             "counts": {"posted": posted},
-            "artifacts": common.artifacts_for(run_dir, [
-                "ledger/ledger.sqlite3",
-                "stages/ledger-posting.json",
-            ]),
+            "artifacts": common.artifacts_for(
+                run_dir,
+                [
+                    "ledger/ledger.sqlite3",
+                    "stages/ledger-posting.json",
+                ],
+            ),
             "metrics": {"inserted": inserted, "alreadyPosted": len(already)},
             "error": {
                 "code": fault.get("reasonCode", "INJECTED_LEDGER_FAULT"),
@@ -166,22 +173,28 @@ def run(ctx: dict) -> tuple[dict, int]:
     already_posted = len(payments_sorted) - inserted
 
     posting_json = run_dir / "stages" / "ledger-posting.json"
-    common.write_json(posting_json, {
-        "scenario": ctx["scenario"],
-        "runId": ctx["run_id"],
-        "attempt": attempt,
-        "counts": {"posted": posted},
-        "metrics": {"inserted": inserted, "alreadyPosted": already_posted},
-    })
+    common.write_json(
+        posting_json,
+        {
+            "scenario": ctx["scenario"],
+            "runId": ctx["run_id"],
+            "attempt": attempt,
+            "counts": {"posted": posted},
+            "metrics": {"inserted": inserted, "alreadyPosted": already_posted},
+        },
+    )
     common.log(f"posted={posted} inserted={inserted} alreadyPosted={already_posted}")
 
     result = {
         "status": "success",
         "counts": {"posted": posted},
-        "artifacts": common.artifacts_for(run_dir, [
-            "ledger/ledger.sqlite3",
-            "stages/ledger-posting.json",
-        ]),
+        "artifacts": common.artifacts_for(
+            run_dir,
+            [
+                "ledger/ledger.sqlite3",
+                "stages/ledger-posting.json",
+            ],
+        ),
         "metrics": {"inserted": inserted, "alreadyPosted": already_posted},
     }
     return result, 0
