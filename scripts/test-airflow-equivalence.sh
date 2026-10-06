@@ -9,7 +9,8 @@
 #   equivalence   normalized Airflow output equals the compatibility harness output
 #   retry         partial-ledger-write: one retry after 60s, read from Airflow's records
 #   rerun         duplicate-retry: two DAG runs, identical passes, ledger rows [6, 6]
-#   no-retry      any other failure fails once, logs the mail, stops downstream tasks
+#   no-retry      other failures (bad scenario id; undeclared exit 1 in post_pending_ledger)
+#                 fail after one try, log the mail, and stop downstream tasks
 #   determinism   two Airflow runs with one run id give byte-identical stages and output
 #   listeners     every Airflow listener is on 127.0.0.1:$PAYOPS_AIRFLOW_PORT
 #   pin           the installed Airflow matches airflow-version.env and its constraints
@@ -38,8 +39,13 @@ RERUN_SCENARIO="duplicate-retry"
 DETERMINISM_SCENARIOS=(happy-path reconciliation-breaks partial-ledger-write)
 NO_RETRY_SCENARIO="no-such-scenario"
 NO_RETRY_FAILED_TASK="watch_inbound_files"
+# watch_inbound_files has no retries, so a second case fails the one task that
+# retries (post_pending_ledger, retries=2) with an undeclared exit 1, caused by
+# a file that is not SQLite at the run's ledger path. It must not retry either.
+NO_RETRY_LEDGER_SCENARIO="happy-path"
+NO_RETRY_LEDGER_TASK="post_pending_ledger"
 
-usage() { sed -n '3,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 SELECTED=()
 for argument in "$@"; do
@@ -245,21 +251,38 @@ check_rerun() {
   return "$ok"
 }
 
-check_no_retry() {
-  local run_id="$RUN_PREFIX-no-retry" dag_run_id code=0 ok=0
+seed_corrupt_ledger() {
+  mkdir -p "$1/ledger"
+  printf 'not a SQLite database: seeded by the no-retry check\n' >"$1/ledger/ledger.sqlite3"
+}
+
+# Trigger one DAG run that must fail at <failed task> after exactly one try.
+# The optional fourth argument names a function that seeds the run directory.
+no_retry_case() {
+  local label="$1" scenario="$2" failed_task="$3" seed="${4:-}"
+  local run_id="$RUN_PREFIX-$label" dag_run_id code=0 ok=0
   dag_run_id="${run_id}__$(date -u +%Y%m%dT%H%M%SZ)"
   rm -rf "${RUN_ROOT:?}/$run_id"
-  info "triggering DAG run $dag_run_id with scenario $NO_RETRY_SCENARIO"
+  [ -z "$seed" ] || "$seed" "$RUN_ROOT/$run_id"
+  info "triggering DAG run $dag_run_id (scenario $scenario); $failed_task must fail once"
   "$KIT_ROOT/scripts/airflow-run.sh" --trigger \
-      "{\"scenario\": \"$NO_RETRY_SCENARIO\", \"run_id\": \"$run_id\"}" --dag-run-id "$dag_run_id" \
-      >"$OUT_DIR/no-retry.json" 2>"$OUT_DIR/no-retry.log" || code=$?
+      "{\"scenario\": \"$scenario\", \"run_id\": \"$run_id\"}" --dag-run-id "$dag_run_id" \
+      >"$OUT_DIR/$label.json" 2>"$OUT_DIR/$label.log" || code=$?
   if [ "$code" -ne 1 ]; then
     err "airflow-run.sh --trigger exited $code, want 1 (the DAG run failed)"
-    tail -n 15 "$OUT_DIR/no-retry.log" | sed 's/^/    /' >&2
+    tail -n 15 "$OUT_DIR/$label.log" | sed 's/^/    /' >&2
     ok=1
   fi
-  checks_py no-retry --dag-run-id "$dag_run_id" --failed-task "$NO_RETRY_FAILED_TASK" \
-    --run-id "$run_id" --scenario "$NO_RETRY_SCENARIO" || ok=1
+  checks_py no-retry --dag-run-id "$dag_run_id" --failed-task "$failed_task" \
+    --run-id "$run_id" --scenario "$scenario" || ok=1
+  return "$ok"
+}
+
+check_no_retry() {
+  local ok=0
+  no_retry_case no-retry "$NO_RETRY_SCENARIO" "$NO_RETRY_FAILED_TASK" || ok=1
+  no_retry_case no-retry-ledger "$NO_RETRY_LEDGER_SCENARIO" "$NO_RETRY_LEDGER_TASK" \
+    seed_corrupt_ledger || ok=1
   airflow_unittests "exit code classification" \
     test_airflow_task.TestClassify test_airflow_task.TestRunPayopsTask || ok=1
   return "$ok"
