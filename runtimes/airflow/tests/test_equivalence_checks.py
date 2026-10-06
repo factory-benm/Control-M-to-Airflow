@@ -54,6 +54,15 @@ def write_manifest(run_dir: Path, **fields: Any) -> None:
 
 
 class TestOwedSet(unittest.TestCase):
+    def test_a_scenario_without_an_oracle_stays_owed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            scenarios = Path(temp) / "fixtures" / "scenarios"
+            (scenarios / "graded" / "expected").mkdir(parents=True)
+            (scenarios / "graded" / "expected" / "manifest.json").write_text("{}", "utf-8")
+            (scenarios / "ungraded").mkdir()
+            (scenarios / "README.md").write_text("not a scenario", "utf-8")
+            self.assertEqual(checks.owed_scenarios(Path(temp)), ["graded", "ungraded"])
+
     def test_owed_scenarios_are_the_five_fixture_directories(self) -> None:
         self.assertEqual(
             checks.owed_scenarios(KIT_ROOT),
@@ -182,9 +191,27 @@ class TestNoRetryCheck(unittest.TestCase):
         )
         self.assertTrue(checks.callback_problems("", MAIL, "watch", "r", "s"))
 
+    def test_attempt_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            run_dir = Path(temp)
+            self.assertTrue(checks.attempt_exit_problems(run_dir, RETRIED, 1))
+            (run_dir / "logs").mkdir()
+            records = [
+                {"task": ORDER[0], "attempt": 1, "exitCode": 0},
+                {"task": RETRIED, "attempt": 1, "exitCode": 1},
+            ]
+            attempts = run_dir / "logs" / "airflow-attempts.jsonl"
+            attempts.write_text("".join(json.dumps(r) + "\n" for r in records), "utf-8")
+            self.assertEqual(checks.attempt_exit_problems(run_dir, RETRIED, 1), [])
+            self.assertTrue(checks.attempt_exit_problems(run_dir, RETRIED, 4))
+            retried = {"task": RETRIED, "attempt": 2, "exitCode": 1}
+            with open(attempts, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(retried) + "\n")
+            self.assertTrue(checks.attempt_exit_problems(run_dir, RETRIED, 1))
+
     def test_whole_check_reads_the_task_log(self) -> None:
         arguments = argparse.Namespace(
-            dag_run_id="d", failed_task=ORDER[0], run_id="r", scenario="s"
+            dag_run_id="d", failed_task=ORDER[0], run_id="r", scenario="s", exit_code=None
         )
         mail = checks.failure_mail(KIT_ROOT)
         line = f"not sent: to={mail['To']} message='{ORDER[0]} failed for run r scenario s'"
@@ -195,12 +222,20 @@ class TestNoRetryCheck(unittest.TestCase):
 
 
 class TestLabels(unittest.TestCase):
-    def check(self, mode: str, run_type: str, dag_runs: list[dict[str, str]]) -> list[str]:
+    def check(
+        self,
+        mode: str,
+        run_type: str,
+        dag_runs: list[dict[str, str]],
+        manifest_runtime: dict[str, Any] | None = None,
+    ) -> list[str]:
         with tempfile.TemporaryDirectory() as temp:
             run_dir = Path(temp)
             runtime = {"mode": mode, "isControlM": False}
             (run_dir / "runtime.json").write_text(json.dumps(runtime), encoding="utf-8")
-            write_manifest(run_dir, runtime=runtime, airflow={"dagRuns": dag_runs})
+            write_manifest(
+                run_dir, runtime=manifest_runtime or runtime, airflow={"dagRuns": dag_runs}
+            )
             info = {**dag_run(), "runType": run_type}
             return checks.labels_problems(run_dir, lambda _: info)
 
@@ -210,11 +245,22 @@ class TestLabels(unittest.TestCase):
         self.assertTrue(self.check("airflow", "manual", []))
         self.assertTrue(self.check("airflow", "backfill", [{"dagRunId": "x"}]))
 
+    def test_manifest_must_say_not_control_m(self) -> None:
+        for runtime in ({"mode": "airflow"}, {"mode": "airflow", "isControlM": True}):
+            with self.subTest(runtime=runtime):
+                self.assertTrue(self.check("airflow", "manual", [{"dagRunId": "x"}], runtime))
+
+
+RUN_START = datetime(2026, 10, 6, 10, 0, tzinfo=UTC)
+WINDOWS = [(RUN_START, RUN_START + timedelta(minutes=1))]
+
 
 class TestListeners(unittest.TestCase):
-    def snapshot(self, *sockets: tuple[str, str, bool]) -> dict[str, Any]:
+    def snapshot(
+        self, *sockets: tuple[str, str, bool], at: datetime = RUN_START + timedelta(seconds=30)
+    ) -> dict[str, Any]:
         return {
-            "at": "t",
+            "at": at.isoformat(),
             "sockets": [
                 {"proto": proto, "local": local, "pid": 1, "airflow": airflow, "cmd": "c"}
                 for proto, local, airflow in sockets
@@ -223,7 +269,7 @@ class TestListeners(unittest.TestCase):
 
     def test_only_loopback_api_port(self) -> None:
         good = self.snapshot(("tcp", "127.0.0.1:8080", True), ("tcp", "0.0.0.0:22", False))
-        self.assertEqual(checks.listener_problems([good], 8080), [])
+        self.assertEqual(checks.listener_problems([good], 8080, WINDOWS), [])
         for bad in (
             ("tcp", "0.0.0.0:8793", True),
             ("tcp", "[::]:8794", True),
@@ -231,12 +277,25 @@ class TestListeners(unittest.TestCase):
         ):
             with self.subTest(bad=bad):
                 snapshot = self.snapshot(("tcp", "127.0.0.1:8080", True), bad)
-                self.assertTrue(checks.listener_problems([snapshot], 8080))
-        self.assertTrue(checks.listener_problems([], 8080))
+                self.assertTrue(checks.listener_problems([snapshot], 8080, WINDOWS))
+        self.assertTrue(checks.listener_problems([], 8080, WINDOWS))
         self.assertTrue(
-            checks.listener_problems([self.snapshot(("tcp", "0.0.0.0:22", False))], 8080)
+            checks.listener_problems([self.snapshot(("tcp", "0.0.0.0:22", False))], 8080, WINDOWS)
         )
-        self.assertTrue(checks.listener_problems([good], 9090))
+        self.assertTrue(checks.listener_problems([good], 9090, WINDOWS))
+
+    def test_a_snapshot_must_fall_inside_a_scenario_run(self) -> None:
+        after = self.snapshot(("tcp", "127.0.0.1:8080", True), at=RUN_START + timedelta(hours=1))
+        self.assertTrue(checks.listener_problems([after], 8080, WINDOWS))
+        good = self.snapshot(("tcp", "127.0.0.1:8080", True))
+        self.assertTrue(checks.listener_problems([good], 8080, []))
+
+    def test_windows_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "windows.txt"
+            self.assertEqual(checks.read_windows(path), [])
+            path.write_text("2026-10-06T10:00:00+00:00 2026-10-06T10:01:00+00:00\n", "utf-8")
+            self.assertEqual(checks.read_windows(path), WINDOWS)
 
 
 class TestPins(unittest.TestCase):

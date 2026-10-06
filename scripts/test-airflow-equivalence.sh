@@ -44,6 +44,7 @@ NO_RETRY_FAILED_TASK="watch_inbound_files"
 # a file that is not SQLite at the run's ledger path. It must not retry either.
 NO_RETRY_LEDGER_SCENARIO="happy-path"
 NO_RETRY_LEDGER_TASK="post_pending_ledger"
+NO_RETRY_LEDGER_EXIT=1
 
 usage() { sed -n '3,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
@@ -74,6 +75,7 @@ TESTS_DIR="$KIT_ROOT/runtimes/airflow/tests"
 RUN_ROOT="$KIT_ROOT/workspace/runtime/runs"
 OUT_DIR="$KIT_ROOT/workspace/airflow-equivalence"
 SNAPSHOTS="$OUT_DIR/listeners.jsonl"
+WINDOWS="$OUT_DIR/run-windows.txt"
 # Outputs embed the run id and the normalized view keeps file sizes, so the
 # Airflow and harness run ids of the equivalence check have the same length.
 RUN_PREFIX="afeq-airflow"
@@ -131,16 +133,24 @@ verify_run() {
   python3 "$VERIFY" --run-dir "$1" --kit-root "$KIT_ROOT"
 }
 
-# One Airflow run per scenario per invocation, graded by the oracle once.
+utc_now() { date -u +%Y-%m-%dT%H:%M:%S+00:00; }
+
+# One Airflow run per scenario per invocation, graded by the oracle once. The
+# run directory is cleared first, so nothing from an earlier invocation can be
+# graded if this run fails early. Each run's time window goes to WINDOWS for
+# the listeners check.
 airflow_run() {
   local scenario="$1" run_id="$RUN_PREFIX-$1"
-  local status_file="$OUT_DIR/$run_id.status" code=0
+  local status_file="$OUT_DIR/$run_id.status" code=0 started
   if [ -f "$status_file" ]; then
     return "$(cat "$status_file")"
   fi
   info "running $scenario on Airflow (run id $run_id)"
+  rm -rf "${RUN_ROOT:?}/$run_id"
+  started="$(utc_now)"
   "$KIT_ROOT/scripts/airflow-run.sh" "$scenario" --run-id "$run_id" \
     >"$OUT_DIR/$run_id.manifest.json" 2>"$OUT_DIR/$run_id.log" || code=$?
+  printf '%s %s\n' "$started" "$(utc_now)" >>"$WINDOWS"
   if [ "$code" -ne 0 ]; then
     err "$scenario: airflow-run.sh exited $code"
     tail -n 15 "$OUT_DIR/$run_id.log" | sed 's/^/    /' >&2
@@ -154,14 +164,15 @@ airflow_run() {
   return "$code"
 }
 
-# Sets OWED to the scenarios with an oracle, the set the scenario checks owe.
+# Sets OWED to every directory under fixtures/scenarios, the set the scenario
+# checks owe. A directory without an oracle stays owed and fails verify_run.py.
 load_owed_scenarios() {
   local scenario
   OWED=()
   while IFS= read -r scenario; do
     [ -n "$scenario" ] && OWED+=("$scenario")
   done < <(checks_py owed-scenarios)
-  [ "${#OWED[@]}" -gt 0 ] || { err "found no scenarios with an oracle"; return 1; }
+  [ "${#OWED[@]}" -gt 0 ] || { err "found no scenarios under fixtures/scenarios"; return 1; }
 }
 
 # -- the checks -------------------------------------------------------------
@@ -170,7 +181,8 @@ check_structure() {
   local ok=0
   airflow_unittests "DAG structure" test_airflow_dag || ok=1
   airflow_unittests "task commands and outcomes" test_airflow_task || ok=1
-  stdlib_unittests "runner and suite" test_airflow_runner test_equivalence_checks || ok=1
+  stdlib_unittests "runner" test_airflow_runner || ok=1
+  stdlib_unittests "suite assertions" test_equivalence_checks || ok=1
   return "$ok"
 }
 
@@ -204,7 +216,10 @@ check_equivalence() {
     harness_id="$HARNESS_PREFIX-$scenario"
     airflow_dir="$RUN_ROOT/$RUN_PREFIX-$scenario"
     harness_dir="$RUN_ROOT/$harness_id"
-    airflow_run "$scenario" || true
+    if ! airflow_run "$scenario"; then
+      err "$scenario: no passing Airflow run to compare"
+      continue
+    fi
     if ! python3 "$HARNESS" --scenario "$scenario" --run-id "$harness_id" \
           --kit-root "$KIT_ROOT" --repos-root "$(resolve_repos_root)" --run-root "$RUN_ROOT" \
           >/dev/null 2>"$OUT_DIR/$harness_id.log"; then
@@ -257,9 +272,10 @@ seed_corrupt_ledger() {
 }
 
 # Trigger one DAG run that must fail at <failed task> after exactly one try.
-# The optional fourth argument names a function that seeds the run directory.
+# Optional: the exit code that try must record, and a function that seeds the
+# run directory first.
 no_retry_case() {
-  local label="$1" scenario="$2" failed_task="$3" seed="${4:-}"
+  local label="$1" scenario="$2" failed_task="$3" exit_code="${4:-}" seed="${5:-}"
   local run_id="$RUN_PREFIX-$label" dag_run_id code=0 ok=0
   dag_run_id="${run_id}__$(date -u +%Y%m%dT%H%M%SZ)"
   rm -rf "${RUN_ROOT:?}/$run_id"
@@ -274,7 +290,7 @@ no_retry_case() {
     ok=1
   fi
   checks_py no-retry --dag-run-id "$dag_run_id" --failed-task "$failed_task" \
-    --run-id "$run_id" --scenario "$scenario" || ok=1
+    --run-id "$run_id" --scenario "$scenario" ${exit_code:+--exit-code "$exit_code"} || ok=1
   return "$ok"
 }
 
@@ -282,9 +298,9 @@ check_no_retry() {
   local ok=0
   no_retry_case no-retry "$NO_RETRY_SCENARIO" "$NO_RETRY_FAILED_TASK" || ok=1
   no_retry_case no-retry-ledger "$NO_RETRY_LEDGER_SCENARIO" "$NO_RETRY_LEDGER_TASK" \
-    seed_corrupt_ledger || ok=1
-  airflow_unittests "exit code classification" \
-    test_airflow_task.TestClassify test_airflow_task.TestRunPayopsTask || ok=1
+    "$NO_RETRY_LEDGER_EXIT" seed_corrupt_ledger || ok=1
+  airflow_unittests "exit code classification" test_airflow_task.TestClassify || ok=1
+  airflow_unittests "task outcomes" test_airflow_task.TestRunPayopsTask || ok=1
   return "$ok"
 }
 
@@ -327,7 +343,7 @@ check_listeners() {
     airflow_run happy-path || true
   fi
   checks_py listeners-sample --out "$SNAPSHOTS"
-  checks_py listeners --snapshots "$SNAPSHOTS"
+  checks_py listeners --snapshots "$SNAPSHOTS" --windows "$WINDOWS"
 }
 
 check_pin() {

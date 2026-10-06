@@ -70,11 +70,13 @@ def task_order(kit_root: Path) -> list[str]:
 
 
 def owed_scenarios(kit_root: Path) -> list[str]:
-    """Every scenario with an oracle; the set owed by the scenario checks."""
+    """Every directory under fixtures/scenarios; the set owed by the scenario checks.
+
+    A directory without an oracle stays in the set, so its run fails
+    verify_run.py instead of silently dropping out.
+    """
     scenarios = kit_root / "fixtures" / "scenarios"
-    return sorted(
-        path.name for path in scenarios.iterdir() if (path / "expected" / "manifest.json").is_file()
-    )
+    return sorted(path.name for path in scenarios.iterdir() if path.is_dir())
 
 
 def seconds_between(earlier: str | None, later: str | None) -> float:
@@ -94,7 +96,10 @@ def labels_problems(run_dir: Path, fetch: Fetch) -> list[str]:
         problems.append(
             f"runtime.json mode={runtime.get('mode')} isControlM={runtime.get('isControlM')}"
         )
-    if manifest["runtime"].get("mode") != "airflow" or manifest["runtime"].get("isControlM"):
+    if (
+        manifest["runtime"].get("mode") != "airflow"
+        or manifest["runtime"].get("isControlM") is not False
+    ):
         problems.append(f"run-manifest.json runtime={manifest['runtime']}")
     dag_runs = manifest.get("airflow", {}).get("dagRuns") or []
     if not dag_runs:
@@ -293,12 +298,26 @@ def callback_problems(
     return [f"no failure callback line for {task} naming {mail['To']} and {message!r}"]
 
 
+def attempt_exit_problems(run_dir: Path, task: str, exit_code: int) -> list[str]:
+    """The task's own attempt records: exactly one attempt, with the wanted exit code."""
+    path = run_dir / "logs" / "airflow-attempts.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    records = [json.loads(line) for line in lines if line.strip()]
+    observed = [(r["attempt"], r["exitCode"]) for r in records if r["task"] == task]
+    if observed != [(1, exit_code)]:
+        return [f"{task} attempts (attempt, exit) were {observed}, want [(1, {exit_code})]"]
+    return []
+
+
 def no_retry_problems(
     kit_root: Path, arguments: argparse.Namespace, fetch: Fetch, read_log: Callable[[str, str], str]
 ) -> list[str]:
     order = task_order(kit_root)
     info = fetch(arguments.dag_run_id)
     problems = failed_run_problems(info, order, arguments.failed_task)
+    if arguments.exit_code is not None:
+        run_dir = kit_root / "workspace" / "runtime" / "runs" / arguments.run_id
+        problems += attempt_exit_problems(run_dir, arguments.failed_task, arguments.exit_code)
     problems += callback_problems(
         read_log(arguments.dag_run_id, arguments.failed_task),
         failure_mail(kit_root),
@@ -365,9 +384,26 @@ def sample_listeners(home: Path) -> JsonObject:
     }
 
 
-def listener_problems(snapshots: list[JsonObject], port: int) -> list[str]:
+def read_windows(path: Path) -> list[tuple[datetime, datetime]]:
+    """Scenario run windows, one 'start end' pair of ISO times per line."""
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    pairs = [line.split() for line in lines if line.strip()]
+    return [(datetime.fromisoformat(start), datetime.fromisoformat(end)) for start, end in pairs]
+
+
+def listener_problems(
+    snapshots: list[JsonObject], port: int, windows: list[tuple[datetime, datetime]]
+) -> list[str]:
+    """Every Airflow listener is 127.0.0.1:<port>, and some snapshot saw a scenario run."""
     allowed = f"127.0.0.1:{port}"
     problems: list[str] = []
+    during = [
+        snapshot
+        for snapshot in snapshots
+        if any(start <= datetime.fromisoformat(snapshot["at"]) <= end for start, end in windows)
+    ]
+    if not during:
+        problems.append(f"none of {len(snapshots)} snapshots was taken while a scenario ran")
     seen: set[str] = set()
     for snapshot in snapshots:
         for socket in snapshot["sockets"]:
@@ -384,7 +420,10 @@ def listener_problems(snapshots: list[JsonObject], port: int) -> list[str]:
         problems.append("no listener snapshots were taken")
     elif f"tcp {allowed}" not in seen:
         problems.append(f"the API server listener {allowed} was never attributed to Airflow")
-    print(f"  {len(snapshots)} snapshots; Airflow listeners seen: {sorted(seen)}")
+    print(
+        f"  {len(snapshots)} snapshots, {len(during)} during {len(windows)} scenario runs; "
+        f"Airflow listeners seen: {sorted(seen)}"
+    )
     return problems
 
 
@@ -495,8 +534,11 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     no_retry = commands.add_parser("no-retry")
     for name in ("--dag-run-id", "--failed-task", "--run-id", "--scenario"):
         no_retry.add_argument(name, required=True)
+    no_retry.add_argument("--exit-code", type=int)
     commands.add_parser("listeners-sample").add_argument("--out", type=Path, required=True)
-    commands.add_parser("listeners").add_argument("--snapshots", type=Path, required=True)
+    listeners = commands.add_parser("listeners")
+    listeners.add_argument("--snapshots", type=Path, required=True)
+    listeners.add_argument("--windows", type=Path, required=True)
     commands.add_parser("pin")
     return parser.parse_args(argv)
 
@@ -515,7 +557,8 @@ def run_command(arguments: argparse.Namespace) -> list[str]:
     if command == "listeners":
         lines = arguments.snapshots.read_text(encoding="utf-8").splitlines()
         port = int(os.environ.get("PAYOPS_AIRFLOW_PORT", "8080"))
-        return listener_problems([json.loads(line) for line in lines if line.strip()], port)
+        snapshots = [json.loads(line) for line in lines if line.strip()]
+        return listener_problems(snapshots, port, read_windows(arguments.windows))
     return pin_problems(kit_root, airflow_home())
 
 
