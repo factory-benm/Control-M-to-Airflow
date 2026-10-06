@@ -1,0 +1,24 @@
+PARTICIPANT_CHECKLIST.md
+  s_3a633203de3586::t_c136d20d26f0cc 317
+  s_3a633203de3586::t_21e2ada29e5f40 121,124-165,169,178-179,181,187-190,195,197-199,207,211,213,216,221-222,224-225,227-231,234-236,240,243,246-256,268,284
+README.md
+  s_3a633203de3586::t_8ca08e629eae6a 63-65
+BUILD_PROMPT.md
+  s_3a633203de3586::t_bad194a3753765 3-6,8-11,16-19,24,26-28,36,40,42,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f77bec4a5095c25bbe1ef46232e60791ff98521",
+  "prompts": {},
+  "sessions": {
+    "s_3a633203de3586": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "b79e8ab1-a4e6-40c3-ae17-01309c6f3e86",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    }
+  }
+}
