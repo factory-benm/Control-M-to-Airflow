@@ -220,24 +220,39 @@ that rule; the recommendation column assumes it.
 ### 5.1 Layout
 
 New files only. Nothing under `repos/`, `fixtures/`, or `runtimes/control-m/`
-changes, except the single allow-list entry in `verify_run.py` if Decision 11
-is accepted.
+changes, except the single allow-list entry in `verify_run.py` (Decision 11).
 
 ```
 runtimes/airflow/
-  README.md                         start, stop, trigger, and test commands
+  README.md                         install, start, stop, run, trigger, and check commands
   airflow-version.env               exact Airflow version, Python version, constraints URL
   dags/
     payops_cross_border_reconciliation.py   the DAG (one file)
-  tests/                            DAG structure and schedule tests (unittest)
+  runner.py                         behind airflow-run.sh: trigger DAG run(s), wait, build run-manifest.json (standard library)
+  airflow_state.py                  read-only metadata DB queries: DAG readiness, pause state, DAG runs with every task try
+  equivalence_checks.py             the assertions behind test-airflow-equivalence.sh (standard library)
+  tests/                            unittest: DAG structure, task commands and outcomes, schedule, runner, suite self-tests
 scripts/
+  lib/airflow.sh                    shared Airflow settings: paths, port, AIRFLOW__* variables
   airflow-up.sh                     install the pin (first time), start Airflow on 127.0.0.1
   airflow-down.sh                   stop Airflow
   airflow-run.sh <scenario>         prepare run dir, trigger DAG run(s), wait, build run-manifest.json
-  test-airflow-equivalence.sh       every Airflow check in section 6, one command
+  airflow-run.sh --trigger '<conf>' start one DAG run with that conf and wait for it
+  test-airflow-equivalence.sh       every Airflow check in section 6, plus listeners and pin; one command
 docs/migration-design.md            this file
 workspace/airflow/                  AIRFLOW_HOME: venv, metadata DB, logs, generated admin password (git-ignored)
+workspace/airflow-equivalence/      details of the last suite run (git-ignored)
 ```
+
+Existing files that change: `runtimes/control-m/harness/verify_run.py` (one
+allow-list entry), `scripts/check.sh` (the Airflow step, Decision 16),
+`pyproject.toml` (mypy and vulture paths), `AGENTS.md` and `README.md` (the new
+commands).
+
+Type checking: mypy strict covers `runner.py`, `equivalence_checks.py`, and
+their tests. The DAG, `airflow_state.py`, and the three tests that import
+Airflow are not type-checked, because Airflow is installed only in its own venv
+and not in the dev tools venv (section 7). Ruff and vulture cover every file.
 
 The DAG does not go in `repos/payments-orchestrator/` because that repository
 carries a `STDLIB_ONLY` marker and the DAG imports Airflow (Decision 13). It
@@ -273,6 +288,9 @@ Control-M.
 
 Runs are triggered with `scripts/airflow-run.sh <scenario>`, which uses the
 Airflow CLI with DAG run conf `{scenario, run_id, kit_root, fixed_clock, pass}`.
+Before it triggers anything, it waits until the DAG processor has parsed the
+DAG file as it is on disk, so a run started right after an edit never runs the
+previous version.
 Scenario proofs use the real scheduler, not `airflow dags test`, so retries and
 retry delays behave as they will in practice.
 
@@ -291,7 +309,13 @@ before the scenario run because `max_active_runs=1`.
 ## 6. How we prove the Airflow version is equivalent
 
 `scripts/test-airflow-equivalence.sh` runs all of these and exits 0 only if all
-pass. Each check maps to an item in `BUILD_PROMPT.md` "What done means".
+pass. Each check maps to an item in `BUILD_PROMPT.md` "What done means". As
+built, it names checks 1 to 8 `structure`, `schedule`, `oracle`, `equivalence`,
+`retry`, `rerun`, `no-retry`, and `determinism`, and adds `listeners` (every
+Airflow socket is on 127.0.0.1, Decision 17) and `pin` (the installed packages
+match the pin and its constraints file, Decision 13). Check 9 is
+`./scripts/check.sh`, which runs the suite as its last step. The whole suite
+takes about 8 minutes, most of it the scenario runs and the 60-second retry delays.
 
 1. **DAG structure.** The DAG imports with no errors (DagBag). It has exactly 12 tasks with the canonical names and no cycles. Its edge set equals `graph_from_json`, `graph_from_xml`, and `graph_from_task_commands` edge sets (11 edges). `post_pending_ledger` has `retries=2`, `retry_delay=60s`, no exponential backoff; every other task has `retries=0`. Every task has the failure callback. The DAG is paused on creation, `max_active_runs=1`, `catchup=False`.
 2. **Schedule.** Enumerate the DAG's timetable across 2026 and compare with the expected list built independently from calendars.json (`weekDays` minus `excludedDates`): 254 run dates, each at 20:00 in the decided timezone (Decision 2). Spot checks: first 2026-01-02, last 2026-12-31, no run on 2026-03-20 (Friday holiday), a run on 2026-03-19. Also check that calendars.json and the fixture calendar list the same holidays.
@@ -462,3 +486,7 @@ day. No decision is OPEN.
 | 2026-10-06 | Section 5.3 and Decision 13 no longer use `airflow standalone`; added Decision 17. | `standalone` binds two log servers to all interfaces, which breaks the 127.0.0.1-only rule. Decided by the decision owner. |
 | 2026-10-06 | Section 5.3 describes how `airflow-run.sh` runs a paused DAG; added Decision 18. | Triggered runs never start on a paused DAG, and the draft did not say how the runner handles that. Decided by the decision owner. |
 | 2026-10-06 | Line references now say they match commit `7601515`, not `a5eefcb`. | The references match the harness and `verify_run.py` as refactored in `7601515` (for example the allow-list is `verify_run.py:132` there and line 113 at `a5eefcb`). |
+| 2026-10-06 | Section 5.1 lists the files as built: `runner.py`, `airflow_state.py`, `equivalence_checks.py`, `scripts/lib/airflow.sh`, the `--trigger` form of `airflow-run.sh`, `workspace/airflow-equivalence/`, and the existing files that change. | The draft named the scripts but not the helper modules and shared settings they turned out to need. No decision changes. |
+| 2026-10-06 | Section 5.1 records which Airflow files mypy does not check. | Section 7 asked for the exclusion to be documented if Airflow is not in the dev venv, and it is not. |
+| 2026-10-06 | Section 5.3: `airflow-run.sh` waits until the DAG file on disk has been parsed before it triggers a run. | Found at build time: a run triggered within seconds of an edit runs the previously parsed version. |
+| 2026-10-06 | Section 6 records the check names, the added `listeners` and `pin` checks, and the suite's duration. | The listener and pin rules (Decisions 13 and 17) needed a check of their own; the names are what the suite accepts as arguments. |

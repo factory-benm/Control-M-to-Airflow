@@ -129,7 +129,8 @@ class Verifier:
         )
         self.check(
             "runtime mode recorded",
-            self.manifest["runtime"]["mode"] in {"compatibility-harness", "control-m-workbench"},
+            self.manifest["runtime"]["mode"]
+            in {"compatibility-harness", "control-m-workbench", "airflow"},
             f"mode={self.manifest['runtime'].get('mode')}",
         )
         self.check(

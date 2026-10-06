@@ -28,7 +28,9 @@ watch_inbound_files -> verify_file_integrity -> extract_payment_batch
 | `fixtures/` | Five scenarios (`input/`, `reference/`, `expected/manifest.json`), calendar, FX rates, and `CONTRACT.md`, the shared execution contract. |
 | `runtimes/control-m/harness/` | `harness.py` runs a scenario as the definitions declare; `verify_run.py` checks a run against its fixture oracle. |
 | `runtimes/control-m/workbench/` | Optional BMC Control-M Workbench pin. |
-| `scripts/` | `check.sh` (runs all checks), prerequisite check, `lint.sh`, `coverage.sh`, `check-file-sizes.sh`, validation, scenario runner, compatibility test, Workbench up/down. `scripts/lib/common.sh` holds shared helpers and exit codes; `scripts/lib/coverage_gate.py` is the standard-library coverage tool. |
+| `runtimes/airflow/` | The batch on Apache Airflow 3: `dags/` (the DAG, built from the Control-M definitions), `runner.py` (runs a scenario through the scheduler, writes the harness-format manifest), `airflow_state.py`, `equivalence_checks.py`, `tests/`, the pin in `airflow-version.env`, and a `README.md` with every command. |
+| `docs/migration-design.md` | The migration design. Build only what its DECIDED decisions say; record later changes in its section 9. |
+| `scripts/` | `check.sh` (runs all checks), prerequisite check, `lint.sh`, `coverage.sh`, `check-file-sizes.sh`, validation, scenario runner, compatibility test, Workbench up/down, Airflow up/down/run, Airflow equivalence test. `scripts/lib/airflow.sh` holds the Airflow settings. `scripts/lib/common.sh` holds shared helpers and exit codes; `scripts/lib/coverage_gate.py` is the standard-library coverage tool. |
 | `pyproject.toml` | Tool config only (ruff, mypy, pytest, vulture, coverage threshold). Not a package. |
 | `requirements-dev.txt` | Hash-locked dev tools, compiled from `requirements-dev.in`. |
 | `workspace/` | Runtime output (git-ignored). Runs land in `workspace/runtime/runs/<run-id>/`; coverage reports in `workspace/coverage/`. |
@@ -68,13 +70,18 @@ run in place via `PYTHONPATH=src`, so "build" means installing the dev tools
 
 It runs, in order: prerequisites, file size limits, lint/format/types
 (`scripts/lint.sh`), Control-M validation, every `repos/*/scripts/test.sh`,
-coverage thresholds (`scripts/coverage.sh`), and the compatibility test, then
-prints a pass/fail summary with timings. It stops early only if prerequisites
-are missing; it exits 0 when everything passes and 1 otherwise. Run it before
-declaring any change done. It takes under a minute and writes only under
-`workspace/`. If the dev tools are not installed and `uv` is absent, the lint
-step reports `skipped`; CI sets `PAYOPS_REQUIRE_DEV_TOOLS=1` so it never skips
-there (`.github/workflows/ci.yml`).
+coverage thresholds (`scripts/coverage.sh`), the compatibility test, and the
+Airflow equivalence test (`scripts/test-airflow-equivalence.sh`), then prints a
+pass/fail summary with timings. It stops early only if prerequisites are
+missing; it exits 0 when everything passes and 1 otherwise. Run it before
+declaring any change done. It writes only under `workspace/`. Without Airflow
+it takes under a minute. With Airflow installed (`./scripts/airflow-up.sh`) the
+Airflow step adds about 8 minutes: it runs every scenario through the real
+scheduler, starting and stopping Airflow itself if it is not running. If the
+dev tools are not installed and `uv` is absent, the lint step reports
+`skipped`; if Airflow is not installed, the Airflow step reports `skipped`. CI
+sets `PAYOPS_REQUIRE_DEV_TOOLS=1` so lint never skips there
+(`.github/workflows/ci.yml`); CI does not install Airflow.
 
 ## Code quality rules
 
@@ -83,8 +90,11 @@ add `# noqa` / `# type: ignore` to get past a check.
 
 - Formatting: `ruff format`, line length 100. `./scripts/lint.sh --fix` applies
   fixes and formatting.
-- Types: mypy `strict` over `repos/*/src`, `repos/*/tests`, the harness, and
-  `scripts/lib`. Every function, including tests, is fully annotated.
+- Types: mypy `strict` over `repos/*/src`, `repos/*/tests`, the harness,
+  `scripts/lib`, and the standard-library Airflow files (`runner.py`,
+  `equivalence_checks.py` and their tests). Files that import Airflow are not
+  type-checked because Airflow is not in the dev venv (see `pyproject.toml`).
+  Every function, including tests, is fully annotated.
 - Naming (ruff `N`): `snake_case` functions, variables, and modules;
   `CapWords` classes; `UPPER_CASE` module constants; test files
   `tests/test_<area>.py`, classes `Test<Thing>`, methods `test_<behavior>`.
@@ -112,6 +122,10 @@ add `# noqa` / `# type: ignore` to get past a check.
 ./scripts/controlm-run.sh happy-path        # run one scenario
 ./scripts/test-controlm-compatibility.sh    # all scenarios vs. oracles + determinism
 repos/<service>/scripts/test.sh             # one repository's unit tests
+./scripts/airflow-up.sh                     # install (first time) and start Airflow on 127.0.0.1
+./scripts/airflow-run.sh happy-path         # run one scenario on Airflow
+./scripts/test-airflow-equivalence.sh [check ...]   # Airflow vs. oracles and harness
+./scripts/airflow-down.sh                   # stop Airflow
 ```
 
 Scenarios: `happy-path`, `duplicate-retry`, `business-cutoff`,
@@ -124,7 +138,14 @@ root: `.venv/bin/python -m pytest repos/<service>/tests/test_<name>.py`.
 
 Without Workbench, scripts use the compatibility harness and label runs
 `compatibility-harness`. It is not Control-M, and structural validation is not
-`ctm build`; say so when reporting results.
+`ctm build`; say so when reporting results. Airflow runs are labelled
+`airflow`; they are not Control-M either.
+
+The Airflow unit tests live in `runtimes/airflow/tests/`. Those that import
+Airflow run with its venv:
+`cd runtimes/airflow/tests && ../../../workspace/airflow/venv/bin/python -m unittest test_airflow_dag -v`.
+The others need only Python:
+`cd runtimes/airflow/tests && PYTHONPATH=..:../../control-m/harness python3 -m unittest test_airflow_runner -v`.
 
 ## Exit codes
 
@@ -152,7 +173,11 @@ unavailable.
 - Services stay standard-library only (each repo has a `STDLIB_ONLY` marker).
   Do not add third-party dependencies.
 - Tasks make no network calls. A task writes exactly one JSON object to stdout;
-  diagnostics go to stderr.
+  diagnostics go to stderr. The Airflow failure callback only logs the mail.
+- Airflow listens on 127.0.0.1 only. Never start it with `airflow standalone`
+  (its log servers bind to all interfaces); use `./scripts/airflow-up.sh`.
+- Never print or commit the generated Airflow admin password
+  (`workspace/airflow/simple_auth_manager_passwords.json.generated`).
 - Money uses `decimal.Decimal` with `ROUND_HALF_UP`, never floats (see
   `fixtures/CONTRACT.md` section 1.2).
 - Never commit secrets or anything under `workspace/`.

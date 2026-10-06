@@ -9,12 +9,14 @@
 #   5. every repository's tests   repos/*/scripts/test.sh
 #   6. coverage thresholds        scripts/coverage.sh
 #   7. compatibility test         scripts/test-controlm-compatibility.sh
+#   8. Airflow equivalence        scripts/test-airflow-equivalence.sh (skipped if
+#                                 Airflow is not installed; see runtimes/airflow/README.md)
 #
 # If the prerequisite check fails, nothing else runs. Otherwise every step runs
 # even when an earlier one fails, so one invocation reports every failure.
 #
 # Exit codes:
-#   0   every check passed (a skipped lint step still counts as passing)
+#   0   every check passed (a skipped lint or Airflow step still counts as passing)
 #   1   one or more checks failed
 #   2   usage error
 
@@ -22,7 +24,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 
 if [ $# -gt 0 ]; then
   case "$1" in
-    -h|--help) sed -n '3,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "$EXIT_OK" ;;
+    -h|--help) sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "$EXIT_OK" ;;
     *) err "unexpected argument '$1'"; exit "$EXIT_USAGE" ;;
   esac
 fi
@@ -82,6 +84,7 @@ fi
 
 run_step "coverage thresholds" "$KIT_ROOT/scripts/coverage.sh" || true
 run_step "Control-M compatibility test" "$KIT_ROOT/scripts/test-controlm-compatibility.sh" || true
+ALLOW_SKIP=1 run_step "Airflow equivalence" "$KIT_ROOT/scripts/test-airflow-equivalence.sh" || true
 
 summary
 if [ "$FAILURES" -eq 0 ]; then

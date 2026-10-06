@@ -68,11 +68,21 @@ mypy_path = [
   "repos/payment-validation/src",
   "repos/payments-orchestrator/src",
   "repos/settlement-reporting/src",
+  "runtimes/control-m/harness",
+  "runtimes/airflow",
 ]
+# The Airflow DAG, runtimes/airflow/airflow_state.py, and the tests that import
+# Airflow (test_airflow_dag, test_airflow_task, test_airflow_schedule) are not
+# listed: Airflow is installed only in its own venv (runtimes/airflow/README.md),
+# not in the dev tools venv. Ruff and vulture still cover them.
 files = [
   "repos/*/src",
   "repos/*/tests",
   "runtimes/control-m/harness",
+  "runtimes/airflow/runner.py",
+  "runtimes/airflow/equivalence_checks.py",
+  "runtimes/airflow/tests/test_airflow_runner.py",
+  "runtimes/airflow/tests/test_equivalence_checks.py",
   "scripts/lib",
 ]
 
@@ -98,6 +108,7 @@ pythonpath = [
 min_confidence = 60
 paths = [
   "repos",
+  "runtimes/airflow",
   "runtimes/control-m/harness",
   "scripts/lib",
   "vulture_whitelist.py",

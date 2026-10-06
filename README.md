@@ -34,7 +34,9 @@ Each job calls a wrapper that hands the work to the repository that owns it.
 | `repos/*` | Eight Python services (standard library only), one per business step. |
 | `fixtures/` | Five test scenarios with expected results, the business calendar, FX rates, and the shared execution contract. |
 | `runtimes/control-m/` | Compatibility harness and result checker, plus the optional BMC Workbench pin. |
-| `scripts/` | Prerequisite check, validation, scenario runner, compatibility test, and `check.sh`, which runs them all. |
+| `runtimes/airflow/` | The batch migrated to Apache Airflow 3: the DAG, the scenario runner, and its tests. See its [README](runtimes/airflow/README.md). |
+| `docs/migration-design.md` | The Control-M to Airflow migration design and its decisions. |
+| `scripts/` | Prerequisite check, validation, scenario runners, compatibility and Airflow equivalence tests, local Airflow start and stop, and `check.sh`, which runs them all. |
 
 ## Run it
 
@@ -58,11 +60,28 @@ labels every run `compatibility-harness`. It is not Control-M.
 Each repository has its own tests: `repos/<name>/scripts/test.sh`.
 
 To run everything at once (prerequisites, Control-M validation, every
-repository's tests, and the compatibility test):
+repository's tests, the compatibility test, and the Airflow equivalence test):
 
 ```sh
 ./scripts/check.sh
 ```
+
+## Run it on Airflow
+
+The same batch runs on a local Apache Airflow 3.3.2, bound to 127.0.0.1. It
+needs Python 3.12 and, the first time, network access to install the pin.
+
+```sh
+./scripts/airflow-up.sh                   # install (first time) and start Airflow
+./scripts/airflow-run.sh happy-path       # run a scenario through the scheduler
+./scripts/test-airflow-equivalence.sh     # prove it matches the harness and the oracles
+./scripts/airflow-down.sh                 # stop Airflow
+```
+
+These runs are labelled `airflow`; they are not Control-M either. Details,
+including the UI address and the admin password file, are in
+[runtimes/airflow/README.md](runtimes/airflow/README.md). Without Airflow
+installed, `check.sh` reports the Airflow step as skipped.
 
 ## Develop
 
