@@ -1,6 +1,7 @@
 # Migration design: PAYOPS_CROSS_BORDER_RECONCILIATION, Control-M to Apache Airflow 3
 
-Status: DRAFT, decisions OPEN. Written 2026-10-06.
+Status: APPROVED. Every decision in section 8 is DECIDED (2026-10-06).
+Written 2026-10-06. Changes made after the first draft are listed in section 9.
 
 This document is the spec that `/migrate` builds from (see `BUILD_PROMPT.md`).
 It covers one Control-M folder of 12 jobs. It migrates the orchestration only.
@@ -17,7 +18,7 @@ Sources read for this design:
 - `fixtures/CONTRACT.md`, `fixtures/calendars/sg-business-calendar-2026.json`, all five `fixtures/scenarios/*/scenario.json` and `expected/manifest.json`
 - `runtimes/control-m/harness/harness.py`, `runtimes/control-m/harness/verify_run.py`, `scripts/test-controlm-compatibility.sh`
 
-All line references are to the files as they are at commit `a5eefcb`.
+All line references are to the files as they are at commit `7601515`.
 
 ---
 
@@ -265,8 +266,8 @@ Control-M.
 
 - Exact Airflow 3 version pinned in `runtimes/airflow/airflow-version.env`, installed with the official constraints file for that version into a virtual environment under `workspace/airflow/` (Decision 13). The services stay standard library only; Airflow exists only in this runtime venv.
 - `AIRFLOW_HOME=workspace/airflow`, `dags_folder=runtimes/airflow/dags`, example DAGs off.
-- `airflow standalone` (API server, scheduler, DAG processor, triggerer; SQLite metadata DB; LocalExecutor). Confirm at build time that the pinned version supports LocalExecutor on SQLite.
-- API server bound to `127.0.0.1` only, port 8080 unless taken. The task runtime's calls to the API server stay on loopback. Tasks themselves make no network calls.
+- The same four components `airflow standalone` runs, started one by one by `scripts/airflow-up.sh` (Decision 17): `airflow scheduler --skip-serve-logs`, `airflow dag-processor`, `airflow api-server --host 127.0.0.1 --port <port>`, `airflow triggerer --skip-serve-logs`. SQLite metadata DB, LocalExecutor, SimpleAuthManager (the settings `standalone` forces). Confirmed on 3.3.2: LocalExecutor is the default executor and runs on SQLite. `airflow standalone` is not used because in 3.3.2 it starts the scheduler and triggerer log servers bound to all interfaces (`airflow/utils/serve_logs/core.py` binds `host=""` on ports 8793 and 8794, with no setting to change it). With LocalExecutor the API server reads task logs from local files, so the log servers are not needed.
+- API server bound to `127.0.0.1` only, port 8080 unless taken. The task runtime's calls to the API server (`execution_api_server_url`) stay on loopback. The scheduler health check server stays disabled (the default). Tasks themselves make no network calls.
 - The generated admin password stays in `workspace/airflow/` and is never committed or printed in reports.
 - `scripts/airflow-up.sh` exits 78 if Airflow is not installed and cannot be installed (matching `scripts/lib/common.sh` exit codes).
 
@@ -274,6 +275,16 @@ Runs are triggered with `scripts/airflow-run.sh <scenario>`, which uses the
 Airflow CLI with DAG run conf `{scenario, run_id, kit_root, fixed_clock, pass}`.
 Scenario proofs use the real scheduler, not `airflow dags test`, so retries and
 retry delays behave as they will in practice.
+
+The scheduler never starts a DAG run, manual or scheduled, while the DAG is
+paused; a triggered run stays `queued` (confirmed on 3.3.2). So
+`airflow-run.sh` unpauses the DAG only for as long as its own runs take, then
+restores the paused state, also on failure or interrupt (Decision 18). While
+unpaused with `catchup=False`, the timetable only schedules future events, so
+no backlog of 2026 runs is created. If a 20:00 Singapore business-day event
+falls inside that window, the scheduler also starts that scheduled run with
+the Decision 15 defaults; it writes only under `workspace/` and runs after or
+before the scenario run because `max_active_runs=1`.
 
 ---
 
@@ -322,100 +333,132 @@ are. Neither is Control-M, and passing `controlm-validate.sh` is not `ctm build`
 Each decision is OPEN until you answer it. `/migrate` builds only DECIDED
 decisions.
 
+All 18 decisions are DECIDED. Decisions 1 to 16 were decided on 2026-10-06 by
+accepting each recommendation as written. Decisions 17 and 18 were added on
+2026-10-06 when the build found two gaps (section 9) and were decided the same
+day. No decision is OPEN.
+
 ### Decision 1: Which definition wins when the files disagree
 
 - Options: (a) the JSON, as `graph.py:5-6` states; (b) the XML; (c) whichever is stricter, setting by setting.
 - Recommendation: (a). The JSON is the declared authority and the only file whose command lines resolve (D2). Deliberate departures (Decisions 6, 7, 15) are listed explicitly.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: the JSON is the declared authority (`graph.py:5-6`) and the only file whose command lines resolve (D2). Deliberate departures are Decisions 6, 7, and 15.
 
 ### Decision 2: DAG timezone
 
 - Options: (a) `Asia/Singapore`; (b) UTC; (c) the Control-M server's local time, once someone confirms it.
 - Recommendation: (a). It is the only timezone any file states (calendars.json:7, fixture calendar:47, every scenario's cutoff). Singapore has no daylight saving, so 20:00 is always 12:00 UTC.
-- Status: OPEN
+- Status: DECIDED (a) `Asia/Singapore`, 2026-10-06. Reason: it is the only timezone any file states, and with no daylight saving 20:00 is always 12:00 UTC. Confirm with the Control-M administrator before any real cutover (section 7).
 
 ### Decision 3: How the schedule excludes holidays
 
 - Options: (a) Airflow's built-in `EventsTimetable`, with the 254 run times built at parse time from calendars.json; (b) a custom timetable plugin that reads calendars.json; (c) a Monday-to-Friday cron that ignores holidays.
 - Recommendation: (a). It needs no plugin, gives exactly the calendar's dates, and is easy to test. (c) fails "same 2026 run dates". (b) is more code for the same result while the calendar covers one year.
-- Status: OPEN
+- Status: DECIDED (a) `EventsTimetable`, 2026-10-06. Reason: exactly the calendar's dates, no plugin, easy to test.
 
 ### Decision 4: `OrderMethod: Manual`
 
 - Options: (a) keep the schedule and create the DAG paused; (b) no schedule at all (`schedule=None`), manual trigger only; (c) schedule and start unpaused.
 - Recommendation: (a). Nothing runs until an operator acts, as with a manual order, and the schedule still expresses the `When` block so it can be tested. (b) is closer to the letter of `Manual` but makes the schedule check impossible.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: nothing runs until an operator acts, and the schedule stays testable. How the scenario runner executes runs on a paused DAG is Decision 18.
 
 ### Decision 5: The 06:00 end of the window
 
 - Options: (a) start at 20:00 and do not enforce an end, documented as a gap; (b) also log a warning (no mail) when a scheduled run is not finished by 06:00 the next day, using Airflow deadline alerts if the pinned version has them; (c) make tasks refuse to start after 06:00.
 - Recommendation: (a), adding (b) only if the pinned version supports deadline alerts without extra code. (c) would break manual and test runs, whose fixed clocks fall outside the window (D13).
-- Status: OPEN
+- Status: DECIDED (a) only, 2026-10-06. Reason: Airflow 3.3.2 has deadline alerts (`airflow.sdk.DeadlineAlert`), but each alert needs a callback function (`AsyncCallback` or `SyncCallback`), which is extra code, so the condition for adding (b) is not met. The 06:00 end is a documented gap.
 
 ### Decision 6: Which failures retry, and how fast
 
 - Options: (a) CONTRACT semantics: only exit 3, only when the scenario declares that fault for that task and attempt, retries; every other failure fails at once; 60 s delay; (b) literal Control-M: any failure of `post_pending_ledger` retries up to 2 times, 60 s apart; (c) as (a) but with no delay, like the harness.
 - Recommendation: (a). It matches the tested behaviour and `CONTRACT.md:156-157`. Retrying exit 4 (business rule) or 5 (missing input) cannot help. Keep the 60 s delay from the definitions; it does not change the exit sequence.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: it matches `CONTRACT.md:156-157` and the tested behaviour, and keeps the definitions' 60 s delay.
 
 ### Decision 7: Where `--attempt` comes from
 
 - Options: (a) Airflow `try_number`; (b) a static `1`, as the definitions literally say.
 - Recommendation: (a). With (b), partial-ledger-write fails forever (D6). This is a recorded departure from the literal definition.
-- Status: OPEN
+- Status: DECIDED (a) `try_number`, 2026-10-06. Reason: a static `1` makes partial-ledger-write fail forever (D6). Recorded departure from the literal definition.
 
 ### Decision 8: How each task runs the wrapper
 
 - Options: (a) a Python task that runs the wrapper as a subprocess and implements section 5.2; (b) a BashOperator with the command line; (c) BashOperator plus a separate log-capture wrapper script.
 - Recommendation: (a). (b) cannot tell exit 3 from other failures (needed for Decision 6), cannot write the per-attempt records, and treats exit 99 as "skipped" by default. (a) still calls the existing wrapper unchanged.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: only a Python task can tell a declared exit 3 from other failures and write the per-attempt records; it still calls the existing wrapper unchanged.
 
 ### Decision 9: Tasks declared explicitly or derived from the definitions
 
 - Options: (a) build the 12 tasks, edges, and retry limits at parse time from task-commands and `graph.py`, as the harness does (`harness.py:164-176`); (b) write the 12 tasks and edges out by hand in the DAG file.
 - Recommendation: (a). The DAG cannot drift from the definitions, and `graph.py` refuses to load if the three files disagree. The structural test (section 6, check 1) still asserts the exact 12 names and 11 edges, so a reviewer gets the explicit list from the test.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: the DAG cannot drift from the definitions, and the structural test still asserts the explicit 12 names and 11 edges.
 
 ### Decision 10: Failure notification
 
 - Options: (a) a log-only `on_failure_callback` using the JSON's single recipient and message; (b) a log-only callback using the XML's per-job recipients, subjects, and urgency; (c) Airflow email with SMTP pointed nowhere.
 - Recommendation: (a), because the JSON is the authority (Decision 1). Each log line names recipient, job, run id, and scenario. Ask payments operations whether the XML routing (D3) reflects what they want. (c) still attempts a network connection and breaks the no-network rule.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: the JSON is the authority (Decision 1). Nothing is sent. Whether the XML's per-team routing (D3) is wanted stays a question for payments operations.
 
 ### Decision 11: How Airflow runs are graded
 
 - Options: (a) `scripts/airflow-run.sh` writes `runtime.json` and builds `run-manifest.json` in the harness's format from `logs/airflow-attempts.jsonl`, reusing the harness module's helpers by import without editing it, and `verify_run.py` gains `airflow` in its runtime-mode allow-list (one line, `verify_run.py:132`); (b) a separate Airflow-only verifier; (c) the DAG writes the manifest from a DAG-level callback.
 - Recommendation: (a). The oracle stays the same program with one allowed value added, which is the only `verify_run.py` change `BUILD_PROMPT.md` permits. (b) would duplicate and possibly weaken the oracle. (c) cannot cover the two-run `duplicate-retry` case cleanly. Scheduled production runs get per-attempt logs but no `run-manifest.json`, as with real Control-M today.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: the oracle stays the same program. The only `verify_run.py` change is adding `airflow` to the runtime-mode allow-list at `verify_run.py:132`.
 
 ### Decision 12: Whole-batch rerun (`duplicate-retry`)
 
 - Options: (a) a second DAG run on the same run directory with conf `pass=2`, tasks back at attempt 1; (b) clear the first DAG run and let it run again.
 - Recommendation: (a). It mirrors `harness.py:532-533` and keeps attempt numbers at 1. (b) raises `try_number` to 2 and changes the exit sequence.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: mirrors `harness.py:532-533` and keeps every task of the second pass at attempt 1.
 
 ### Decision 13: Where the DAG lives and how Airflow is installed
 
 - Options for location: (a) `runtimes/airflow/`; (b) `repos/payments-orchestrator/airflow/`, which conflicts with its `STDLIB_ONLY` marker; (c) a new top-level `airflow/`.
-- Options for install: (i) pinned venv under `workspace/airflow/` with the official constraints file and `airflow standalone`; (ii) the official Docker Compose stack bound to 127.0.0.1; (iii) a user-wide install.
+- Options for install: (i) pinned venv under `workspace/airflow/` with the official constraints file and `airflow standalone` (replaced by Decision 17); (ii) the official Docker Compose stack bound to 127.0.0.1; (iii) a user-wide install.
 - Exact version: the newest Airflow 3 patch release available at build time, written as an exact pin with its constraints file and a Python version that release supports.
 - Recommendation: (a) with (i). It matches the `runtimes/control-m/` pattern, needs no Docker (AGENTS.md keeps Docker optional), and keeps everything generated in the git-ignored `workspace/`.
-- Status: OPEN
+- Status: DECIDED (a) with (i), 2026-10-06, amended by Decision 17: the four Airflow components are started one by one instead of through `airflow standalone`. Exact version `apache-airflow==3.3.2` (the newest Airflow 3 release on 2026-10-06, published 2026-09-17), Python 3.12, installed with `https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt`.
 
 ### Decision 14: The `CRITICAL` flag
 
 - Options: (a) record it in task docs only; (b) map critical jobs to a higher `priority_weight`; (c) let non-critical jobs (`classify_breaks`, `archive_and_notify`) fail without failing the run.
 - Recommendation: (a). In a straight chain priority changes nothing. (c) would change behaviour: in Control-M a failed non-critical job still stops its successors because the condition is never added.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: in a straight chain priority changes nothing, and (c) would change behaviour.
 
 ### Decision 15: Parameter defaults for runs without conf
 
 - Options: (a) mirror the JSON defaults (`scenario=happy-path`, clock from `scenario.json`), derive paths from the repository root, and default `run_id` to `scheduled-<order date>`; (b) mirror the JSON literally, including `run_id=baseline-happy-path` and `/workspace` paths; (c) require conf and fail without it.
 - Recommendation: (a). (b) writes outside the repository (D10) and reuses one run directory every day, which breaks "runs are immutable once complete" (`CONTRACT.md:163`). `airflow-run.sh` always passes explicit values, so tests do not depend on these defaults.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: (b) writes outside the repository and reuses one run directory every day (D10).
 
 ### Decision 16: The one check command
 
 - Options: (a) `scripts/test-airflow-equivalence.sh` runs every Airflow check, and `scripts/check.sh` calls it as an extra step that is skipped (exit 78) when Airflow is not installed; (b) make Airflow a required step of `check.sh`; (c) keep the two completely separate.
 - Recommendation: (a). One command still runs everything when Airflow is present, and `check.sh` keeps working on machines without it.
-- Status: OPEN
+- Status: DECIDED (a), 2026-10-06. Reason: one command runs everything when Airflow is installed, and `check.sh` keeps working on machines without it.
+
+### Decision 17: How the local Airflow components start
+
+- Found at build time: `airflow standalone` in 3.3.2 starts the scheduler and triggerer without `--skip-serve-logs`, and their log servers bind to all interfaces on ports 8793 and 8794 (`airflow/utils/serve_logs/core.py`, `host=""`). No setting changes that host, so `standalone` cannot meet "bound to 127.0.0.1 only".
+- Options: (a) `scripts/airflow-up.sh` starts the same four components one by one: `scheduler --skip-serve-logs`, `dag-processor`, `api-server --host 127.0.0.1`, `triggerer --skip-serve-logs`, with LocalExecutor and SimpleAuthManager as `standalone` would force; (b) keep `airflow standalone` and accept the two extra listeners.
+- Recommendation: (a). Checked on a throwaway 3.3.2 install: only `127.0.0.1:8080` listened, task logs stayed readable, retries worked.
+- Status: DECIDED (a), 2026-10-06. Reason: it is the only option that keeps every Airflow listener on 127.0.0.1.
+
+### Decision 18: Running scenarios on a DAG that is paused on creation
+
+- Found at build time: the scheduler starts no DAG run, manual or scheduled, while the DAG is paused (Decision 4). A triggered run stays `queued`.
+- Options: (a) `scripts/airflow-run.sh` unpauses the DAG only while its own runs execute, then restores the paused state, also on failure or interrupt; (b) leave the DAG unpaused after the first scenario run; (c) create the DAG unpaused, which reverses Decision 4.
+- Recommendation: (a). The DAG is paused whenever no scenario is running, as with a `Manual` folder. Side effect: an event at 20:00 Singapore time on a business day that falls inside the window starts that scheduled run too (section 5.3).
+- Status: DECIDED (a), 2026-10-06. Reason: it keeps Decision 4 and still lets scenario proofs use the real scheduler.
+
+---
+
+## 9. Changes after the first draft
+
+| Date | Change | Why |
+| --- | --- | --- |
+| 2026-10-06 | Status changed from DRAFT to APPROVED; Decisions 1 to 16 marked DECIDED with their reasons. | The decision owner accepted every recommendation as written. |
+| 2026-10-06 | Decision 5 recorded as (a) only. | The recommendation added (b) only if deadline alerts needed no extra code. In Airflow 3.3.2 every deadline alert needs a callback function. |
+| 2026-10-06 | Decision 13 records the exact pin, `apache-airflow==3.3.2` on Python 3.12, and its constraints URL. | The decision deferred the exact version to build time. |
+| 2026-10-06 | Section 5.3 and Decision 13 no longer use `airflow standalone`; added Decision 17. | `standalone` binds two log servers to all interfaces, which breaks the 127.0.0.1-only rule. Decided by the decision owner. |
+| 2026-10-06 | Section 5.3 describes how `airflow-run.sh` runs a paused DAG; added Decision 18. | Triggered runs never start on a paused DAG, and the draft did not say how the runner handles that. Decided by the decision owner. |
+| 2026-10-06 | Line references now say they match commit `7601515`, not `a5eefcb`. | The references match the harness and `verify_run.py` as refactored in `7601515` (for example the allow-list is `verify_run.py:132` there and line 113 at `a5eefcb`). |
