@@ -60,7 +60,7 @@ Each repository has its own tests: `repos/<name>/scripts/test.sh`.
 ## Workshop flow
 
 1. `/readiness-report`, then fix the gaps that matter (`AGENTS.md`, one check command).
-2. Write a migration design doc.
-3. `/migrate` to Airflow 3 with the prompt in the checklist.
-4. Check the result against the Control-M definitions.
+2. Write a migration design doc, review it, and make its decisions.
+3. `/migrate` to Airflow 3, building what the design doc says.
+4. Check the code matches the design and the Control-M definitions.
 5. Test the Airflow DAG with all five scenarios.

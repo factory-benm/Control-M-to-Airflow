@@ -118,16 +118,55 @@ it and read it. Is anything wrong or made up?
 - [ ] 10\. **Write the design doc.** Paste into Droid:
 
 ```text
-Write docs/migration-design.md for moving this batch from Control-M to Apache Airflow 3. First read every Control-M definition file (JSON, XML, task-commands.json, calendars.json), the scenario fixtures, fixtures/CONTRACT.md, and the compatibility harness. Include: what Control-M does for this batch today; how each piece maps to Airflow, and anything with no direct equivalent; every place the definition files disagree with each other or with the fixtures; the target layout and local Airflow setup; how we will prove the Airflow version is equivalent; risks, and open questions for me. Keep it to what this estate needs. Do not write any code.
+Write docs/migration-design.md for moving this batch from Control-M to Apache Airflow 3. First read every Control-M definition file (JSON, XML, task-commands.json, calendars.json), the scenario fixtures, fixtures/CONTRACT.md, and the compatibility harness. Include: what Control-M does for this batch today; a mapping table with one row per Control-M job and setting, showing the Control-M value (file and line) and its Airflow equivalent; anything with no direct Airflow equivalent and how we will handle it; every place the definition files disagree with each other or with the fixtures; the target layout and local Airflow setup; how we will prove the Airflow version is equivalent; and risks. End with a Decisions section: one entry per choice I need to make, each with the options, your recommendation, and the status OPEN. Keep it to what this estate needs. Do not write any code.
 ```
 
-**Done when:** `docs/migration-design.md` exists, you have read it, and you
-have answered its open questions (in chat or in the doc). Step 13 lists things
-it should not miss.
+**Done when:** `docs/migration-design.md` exists with a mapping table and a
+Decisions section.
+
+- [ ] 11\. **Review the design and make the decisions.** This is the most
+  important review in the workshop, because `/migrate` builds exactly what this
+  doc says. Read it and check that it gets these right:
+
+  - 12 jobs in one straight line. Each Control-M condition becomes exactly one
+    Airflow dependency.
+  - Only `post_pending_ledger` retries: 2 reruns, 1 minute apart. Every other
+    job has 0.
+  - The task attempt number reaches the wrapper (`--attempt`). The
+    partial-ledger-write fault only fires on attempt 1, so a retry that always
+    sends `1` would fail forever.
+  - Schedule: Monday to Friday, only on `PAYOPS_SG_BUSINESS_2026` business days,
+    inside a 20:00 to 06:00 window that crosses midnight. The Control-M JSON
+    never states a timezone; only `controlm/calendars.json` does. Which
+    timezone does the DAG use, and why?
+  - `OrderMethod: Manual` means Control-M does not order the folder
+    automatically. Does the Airflow DAG start paused?
+  - The failure mail becomes a logged callback, not a real email. The XML
+    export has its own copy of the mail action on every job.
+  - The result checker (`verify_run.py`) only accepts the Control-M harness and
+    Workbench as runtimes. How will Airflow runs be graded without weakening it?
+
+  Tell Droid what is wrong and give your answer to each open decision. Then
+  paste:
+
+```text
+Update docs/migration-design.md with my corrections and answers. In the Decisions section, mark each answered decision DECIDED and record the reason. Then list any decision that is still OPEN. Do not write any code.
+```
+
+When nothing is OPEN, commit the doc and tag it. The tag lets you see later
+whether `/migrate` changed the design:
+
+```sh
+git add docs/migration-design.md
+git commit -m "docs: approve Airflow migration design"
+git tag design-approved
+```
+
+**Done when:** every decision is DECIDED and the `design-approved` tag exists.
 
 ### Migrate
 
-- [ ] 11\. **Decide how many `/migrate` runs you need.** For this estate, one.
+- [ ] 12\. **Decide how many `/migrate` runs you need.** For this estate, one.
   It is a single Control-M folder with 12 jobs, one calendar, and five test
   scenarios, which fits comfortably in one run.
 
@@ -136,23 +175,28 @@ it should not miss.
   pattern catalogue of the whole estate, (2) conversion tooling and mapping
   rules, (3) one pilot workflow certified end to end, (4) migration waves of
   folders grouped by pattern, (5) shadow runs and cutover. Each run starts from
-  the previous run's outputs.
+  the previous run's outputs, and the design doc becomes the mapping rulebook
+  that every run reuses.
 
-- [ ] 12\. **Run `/migrate`.** Inside Droid, type `/migrate`, press Enter, and
+- [ ] 13\. **Run `/migrate`.** Inside Droid, type `/migrate`, press Enter, and
   paste this prompt (the same text is in [BUILD_PROMPT.md](BUILD_PROMPT.md)):
 
 ```text
 Migrate the PAYOPS_CROSS_BORDER_RECONCILIATION batch in this repository from Control-M to Apache Airflow 3, side by side with the existing Control-M setup, and prove the Airflow version behaves the same.
 
+The design is decided
+- docs/migration-design.md is the spec. Build what its mapping table and DECIDED decisions say. Do not re-ask questions it already answers.
+- If you find the design is wrong, incomplete, or contradicts the Control-M definitions, stop and ask me. Never change a decision on your own. After I answer, update the doc so it stays an accurate record of what was built.
+
 Sources of truth
 - Control-M definitions: repos/payments-orchestrator/controlm/ (Automation API JSON, legacy XML export, task-commands.json, calendars.json).
 - Business logic lives in the eight repositories under repos/. Every Control-M job only calls the repos/payments-orchestrator/scripts/run-task.sh wrapper. Migrate the orchestration, not the services.
 - Legacy behaviour: scripts/controlm-run.sh <scenario> runs the batch through the Control-M compatibility harness. runtimes/control-m/harness/verify_run.py grades a run directory against fixtures/scenarios/<scenario>/expected/manifest.json. fixtures/CONTRACT.md describes the run directory, exit codes, and business rules.
-- AGENTS.md and docs/migration-design.md. Follow the design doc. If you find it is wrong, fix the doc and tell me why.
+- AGENTS.md describes how to work in this repository.
 
-What to build
-- An Airflow DAG that runs the 12 jobs through the existing wrapper, with dependencies, retries, schedule, business calendar, batch window, timezone, variables, and failure handling taken from the Control-M definitions. Anything with no direct Airflow equivalent must be called out, not silently dropped.
-- A local Airflow environment pinned to an exact Airflow 3 version (Docker Compose is fine), bound to 127.0.0.1 only, with documented start, stop, and trigger commands.
+Deliverables
+- The Airflow DAG the design doc describes, calling the existing wrapper.
+- The local Airflow environment the design doc describes, pinned to an exact Airflow 3 version, bound to 127.0.0.1 only, with documented start, stop, and trigger commands.
 - One command that runs every check below.
 
 What done means (prove each with evidence)
@@ -160,58 +204,56 @@ What done means (prove each with evidence)
 2. All five scenarios (happy-path, duplicate-retry, business-cutoff, partial-ledger-write, reconciliation-breaks) run in Airflow and pass the existing verify_run.py oracle. Read each scenario.json: some inject a fault and some require the batch to be re-run.
 3. For every scenario, Airflow output matches legacy harness output after normalization (verify_run.py --normalize).
 4. In partial-ledger-write, post_pending_ledger fails once, retries, and still posts each payment exactly once. No other task retries.
-5. The DAG's schedule produces the same 2026 run dates as the Control-M definition and business calendar, in Asia/Singapore time.
+5. The DAG's schedule produces the same 2026 run dates as the Control-M definition and business calendar, in the timezone the design doc decided.
 6. Every repository's tests and scripts/test-controlm-compatibility.sh still pass.
 
 Rules
-- Never change fixtures, expected manifests, or service logic to make a check pass. Do not weaken verify_run.py. If it must learn to accept an Airflow runtime, that is the only change allowed there, and you must explain it. If you believe a fixture or rule is wrong, stop and ask me.
+- Never change fixtures, expected manifests, or service logic to make a check pass. Do not weaken verify_run.py. If it must learn to accept an Airflow runtime, that is the only change allowed there, and the design doc must say so. If you believe a fixture or rule is wrong, stop and ask me.
 - Keep the Control-M definitions and legacy harness working. This is not a cutover.
-- Tasks make no network calls and send no real email. Turn the Control-M failure mail into a logged callback.
+- Tasks make no network calls and send no real email.
 - No secrets in the repository. Do not push.
 
-When you finish, give me: the Control-M to Airflow mapping table, the commands you ran and their results, the one command I run to repeat every check, and anything you could not prove.
+When you finish, give me: the commands you ran and their results, the one command I run to repeat every check, every change you made to the design doc and why, and anything you could not prove.
 ```
 
 What happens next:
 
-1. Droid asks a few questions. Answer them.
+1. Droid asks about anything the design doc does not answer. If it asks
+   something the doc already decides, point it to the doc.
 2. Droid proposes a **promise**: what will be true when the migration is done.
-   Read it. Edit it if it misses something from the prompt, then confirm.
+   Read it. Edit it if it misses something from the prompt or the design doc,
+   then confirm.
 3. Droid writes a plan and a validation strategy, then asks for **final plan
-   approval**. Check that every "done means" item has a check behind it.
-4. Droid works until it is done, pausing only for decisions or blockers. This
-   is the longest step. Approve Docker commands when asked.
+   approval**. Check that the plan builds what the design doc says and that
+   every "done means" item has a check behind it.
+4. Droid works until it is done, pausing only for decisions or blockers. If it
+   finds a problem in the design, it stops and asks you. This is the longest
+   step. Approve Docker commands when asked.
 
 Droid keeps the promise, plan, and evidence outside the repository, under
-`~/.factory/missions-m/`. **Done when:** Droid reports every item proven, or
-tells you plainly which ones it could not prove.
+`~/.factory/missions-m/`. The design doc is the record that stays in the
+repository. **Done when:** Droid reports every item proven, or tells you
+plainly which ones it could not prove.
 
 ### Check the result
 
-- [ ] 13\. **Check the migration against Control-M.** Paste into Droid:
+- [ ] 14\. **Check the code matches the design.** Paste into Droid:
 
 ```text
-Compare the Airflow DAG with the Control-M definitions attribute by attribute. For every job and every Control-M setting (conditions added, waited for, and deleted; RerunLimit and Rerun; WeekDays, RuleBasedCalendars, FromTime and ToTime; Defaults variables; ActionIfFailure; OrderMethod), show the Control-M value with file and line, the Airflow equivalent with file and line, and whether they match. Also check that the JSON, XML, and task-commands.json still agree, and that controlm/calendars.json matches fixtures/calendars. List every mismatch or gap. Do not change anything.
+Check the Airflow implementation against docs/migration-design.md and the Control-M definitions. For every row of the design doc's mapping table and every DECIDED decision, show the Control-M source (file and line), the Airflow code (file and line), and whether they match. List every mismatch, and anything the code does that the design doc does not mention. Also confirm that the JSON, XML, and task-commands.json still agree with each other. Do not change anything.
 ```
 
-Check these yourself in its answer:
+Then see whether the design changed after you approved it:
 
-- 12 jobs in one straight line. Each Control-M condition becomes exactly one
-  Airflow dependency.
-- Only `post_pending_ledger` retries: 2 reruns, 1 minute apart. Every other job
-  has 0.
-- The task attempt number reaches the wrapper (`--attempt`). The
-  partial-ledger-write fault only fires on attempt 1, so a retry that always
-  sends `1` would fail forever.
-- Schedule: Monday to Friday, only on `PAYOPS_SG_BUSINESS_2026` business days,
-  inside a 20:00 to 06:00 window that crosses midnight, in Asia/Singapore time.
-  The Control-M JSON never states a timezone. Ask where it came from.
-- `OrderMethod: Manual` means Control-M does not order the folder automatically.
-  Should the Airflow DAG start paused? Decide, and make sure the design doc says so.
-- Failure mail became a logged callback. The XML export has its own copy of the
-  mail action on every job.
+```sh
+git diff design-approved -- docs/migration-design.md
+```
 
-- [ ] 14\. **Test Airflow yourself.** Paste into Droid:
+**Done when:** there are no mismatches (or you understand and accept each
+one), and every change to the design doc matches what Droid told you at the
+end of step 13.
+
+- [ ] 15\. **Test Airflow yourself.** Paste into Droid:
 
 ```text
 Start the local Airflow environment and tell me the URL. Then show me the exact commands to trigger each of the five scenarios, to run every check, and to stop Airflow.
@@ -223,7 +265,7 @@ Open the Airflow UI at the URL Droid gives you, then:
 - Trigger **happy-path**. All 12 tasks go green.
 - Trigger **partial-ledger-write**. `post_pending_ledger` fails once with exit
   code 3, retries, and succeeds.
-- Run the single check command from the end of step 12 in your shell. All five
+- Run the single check command from the end of step 13 in your shell. All five
   scenarios pass the oracle and match the legacy output.
 
 Expected results (from `fixtures/scenarios/*/expected/manifest.json`):
@@ -239,7 +281,7 @@ Expected results (from `fixtures/scenarios/*/expected/manifest.json`):
 **Done when:** every scenario matches this table in Airflow, and the check
 command passes.
 
-- [ ] 15\. **Optional: prove the checks catch drift.** In the Airflow DAG, set
+- [ ] 16\. **Optional: prove the checks catch drift.** In the Airflow DAG, set
   retries on `post_pending_ledger` to 0, run the check command, and watch
   partial-ledger-write fail. Then undo your edit and run the check again to
   see it pass.
@@ -272,6 +314,7 @@ or deploy during the workshop.
 | Docker is not running | Start Docker Desktop and wait until it says it is running. Give it at least 4 GB of memory. |
 | Port 8080 is already in use | Ask Droid to move the Airflow web server to another local port. |
 | `/readiness-fix` says no report found | Run `/readiness-report` first (step 6) and let it finish. |
+| `git commit` asks who you are | Run `git config user.name "Your Name"` and `git config user.email you@example.com` in this folder, then commit again. |
 | Droid closed in the middle of `/migrate` | Run `droid --resume --last` in the same folder and ask it to continue. |
 | Droid did something you did not want | Inspect with `git diff`. Restore a single file with `git checkout -- <file>`. Do not reset the whole tree. |
 | Way behind | Clone the repository again into a **new** folder and start from step 4. Never delete your own folder. |
