@@ -1,0 +1,291 @@
+repos/payment-validation/tests/test_validate.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 2,6,8,10
+  s_0bc8e58d7e4afc::t_3d7e6aaaa3254e 15-17,34,38,43,46,52,57,62,67,74-104,107,118,126,132,135-145
+repos/ledger-reconciliation/tests/test_ledger_cutoff_task.py
+  s_8c311393a4e2c8::t_0e3bd8af70e3f1 1-66,70-137
+  s_8c311393a4e2c8::t_dfae9b0ec842f5 67-69
+repos/payment-notifications/src/payment_notifications/cli.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 10,119-121,123-128,130-132,134-138
+  s_9a48d4817febd4::t_2f538e4f666027 12-16,39-40,51-66,68,71,73-74,77,79,82,84,86,88,96-114,122,129,133,139
+  s_7c550907d03284::t_a89faf9e935e17 11,115-118,140-141
+repos/payment-notifications/src/payment_notifications/notify.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 28-30,32,36,51-59,62,65-71
+  s_9a48d4817febd4::t_75a6e98620a42a 14,24-25
+repos/payment-ingestion/src/payment_ingestion/common.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 8,60,69,106
+  s_7c550907d03284::t_0060c0d649176a 12,14-17,32,37,45,49,56,67-68,70-71,77,82,96,102,107-108,111,118,135,138
+repos/ledger-reconciliation/src/ledger_reconciliation/reconcile.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 147-159,161,170-177
+  s_8c311393a4e2c8::t_918e4432f2d5f2 17,20,32,55-57,94-97,109-110,116,164
+repos/fx-enrichment/tests/test_fx_cli.py
+  s_9a48d4817febd4::t_6fbb8aa0acd9a5 1-208
+.pre-commit-config.yaml
+  s_c77f79b2e53d05::t_5f6ddfffe0c2e1 1-59
+repos/exception-management/src/exception_management/__init__.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 2-3
+repos/ledger-reconciliation/src/ledger_reconciliation/__init__.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 3
+repos/payment-validation/src/payment_validation/common.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 8,62,71,107
+  s_0bc8e58d7e4afc::t_3d354eb2f0dcd2 13,15-19,43,51,55,61,69-70,72-73,79,84,97,103,108-109,112-114,121,138-139
+repos/settlement-reporting/src/settlement_reporting/__init__.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 2-3
+repos/ledger-reconciliation/src/ledger_reconciliation/cutoff.py
+  s_8c311393a4e2c8::t_918e4432f2d5f2 15,19-20,23,30,48,86-89,103,106,143
+  s_c77f79b2e53d05::t_116bbc47e77cd9 128-139,146-152
+repos/settlement-reporting/tests/test_settlement_run.py
+  s_0bc8e58d7e4afc::t_e615a91f1a8321 1-400
+  s_0bc8e58d7e4afc::t_3a31871c82bba2 401-406
+repos/ledger-reconciliation/src/ledger_reconciliation/ledger.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 36,45,129-131,133-148,150,154-160,176-185,191-197
+  s_8c311393a4e2c8::t_918e4432f2d5f2 46-47,52,93-94,102-107,151
+scripts/lint.sh
+  s_c77f79b2e53d05::t_81f0e3e2601419 1-83
+repos/ledger-reconciliation/tests/test_ledger_reconcile_task.py
+  s_8c311393a4e2c8::t_ed5116a5c8a849 1-68,74-111
+  s_8c311393a4e2c8::t_44d08efe35b8de 69-73
+repos/fx-enrichment/src/fx_enrichment/tasks.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 6,57,75,95
+  s_9a48d4817febd4::t_16174eec4b2924 13,28,36-38,46-54,59,63-66,69,71-72
+  s_9a48d4817febd4::t_d4be140d62930b 87
+repos/exception-management/src/exception_management/common.py
+  s_7c550907d03284::t_00617bcfc8be19 16,21-33,79,82,84-85,92,96,103-104,131,135-136,139,145-146,164
+  s_c77f79b2e53d05::t_116bbc47e77cd9 14,99
+  s_7c550907d03284::t_a63318b880dbca 34
+scripts/lib/coverage_gate.py
+  s_c77f79b2e53d05::t_a88c8ac97a0dd3 1-23,25-39,41-50,103-136,152-155,157-196,198-207,211-299
+  s_c77f79b2e53d05::t_1708950c676590 24
+  s_c77f79b2e53d05::t_4eb7ab996569f3 137-151,156
+  s_c77f79b2e53d05::t_2aa3ff76c6c1b7 40,51-102
+  s_c77f79b2e53d05::t_116bbc47e77cd9 197
+  s_c77f79b2e53d05::t_568b11457eebf8 208-210
+repos/payment-notifications/tests/test_notify.py
+  s_9a48d4817febd4::t_158aef0d8e3814 3-5,10,12-14,19-27,29-31,33,39-126,128
+  s_c77f79b2e53d05::t_116bbc47e77cd9 32,34-36
+vulture_whitelist.py
+  s_c77f79b2e53d05::t_f64880c0e2e1fa 1-8
+repos/ledger-reconciliation/tests/test_reconcile.py
+  s_8c311393a4e2c8::t_bfbd5ad645f9df 8-10
+  s_8c311393a4e2c8::t_68b9a01a1ce098 15,20,26,32,39
+repos/exception-management/tests/test_classify.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 40-44,115
+  s_7c550907d03284::t_05e2ddabe379dd 3-5,7-8,10-13,17,22,27,32,37,45-104,106-114,116-138
+repos/ledger-reconciliation/src/ledger_reconciliation/cli.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 14,41-95,108,118-120
+  s_8c311393a4e2c8::t_69e48e13a5c719 128,140,150
+repos/settlement-reporting/src/settlement_reporting/report.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 90,127-133,138,152,171,197-212,216-231,241,247-257,259-269,276-286,296-304,306-318,321,324-330
+  s_0bc8e58d7e4afc::t_13df5e3e3d045f 11,13,15,18,55-57,62,86,91,94,99,114,116,331-332
+repos/fx-enrichment/src/fx_enrichment/cli.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 5,150
+  s_9a48d4817febd4::t_cca4e293d3dfe7 9-10,12,16,36-52,54-55,61-62,75-77,98-130,134,137,140,144,148,152,157
+  s_9a48d4817febd4::t_6a612732ff8f85 79
+  s_9a48d4817febd4::t_72252889362ae3 97
+scripts/coverage.sh
+  s_c77f79b2e53d05::t_13c022de29f771 1-58
+repos/fx-enrichment/tests/test_fx.py
+  s_9a48d4817febd4::t_82f5f21069154b 42-44
+  s_9a48d4817febd4::t_3bb2338ef7ed43 7,9,13,17,20,24,30,34,39-40,45,48,54,57,60
+  s_c77f79b2e53d05::t_116bbc47e77cd9 2,32
+  s_9a48d4817febd4::t_b716c51c781d7a 41
+repos/ledger-reconciliation/tests/test_ledger_common.py
+  s_8c311393a4e2c8::t_dfae9b0ec842f5 134-136
+  s_8c311393a4e2c8::t_3f1e811ff47d81 1-133,137-175
+pyproject.toml
+  s_c77f79b2e53d05::t_358dd36075328d 32-35
+  s_c77f79b2e53d05::t_0f7d52dcb60080 110
+  s_c77f79b2e53d05::t_74e5b2404ba3e9 85-95
+  s_c77f79b2e53d05::t_45af00ab60c0f5 80-83
+  s_c77f79b2e53d05::t_f4238a28c0c9a9 1-31,36-79,84,96-109
+repos/payment-notifications/tests/notify_support.py
+  s_9a48d4817febd4::t_f55b58eb371264 1-43
+repos/exception-management/src/exception_management/cli.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 10,33-37,39-45,56-71,73,76,78-98,101-104,107
+  s_7c550907d03284::t_d484eba1493eae 109-111,113,115,117,125-156
+runtimes/control-m/harness/harness.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 40,74,103,107,116,128,139-145,147,204-233,239-244,257-270,273-281,284,289,291-292,356-357,367,388-395,418-419,446-451,580,585,617
+  s_8c311393a4e2c8::t_cdf5157f56b385 42-46,66,85-87,98,112,146,172-173,181-183,185-186,247,294,301,340-341,382-385,427-428,519,540
+  s_8c311393a4e2c8::t_34ff7398698917 67
+repos/fx-enrichment/tests/fx_support.py
+  s_9a48d4817febd4::t_ee66d1ee7344da 1-53
+requirements-dev.in
+  s_c77f79b2e53d05::t_e59fcb159c5829 1-8
+repos/payment-ingestion/tests/test_header_and_hash.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 2,16,60-69
+  s_7c550907d03284::t_226d8dae9ca62b 21,38,43,50,58,79,86,110
+repos/settlement-reporting/src/settlement_reporting/common.py
+  s_0bc8e58d7e4afc::t_b11ebb455a80b7 15-17,23-33,70,73,75-76,83,89-90,117,121-122,125,131-132,150
+  s_c77f79b2e53d05::t_116bbc47e77cd9 13
+AGENTS.md
+  s_c77f79b2e53d05::t_d6976ff9dcce85 120-123
+  s_c77f79b2e53d05::t_17e3390681d941 108-110
+  s_c77f79b2e53d05::t_e5df0a0d2e7af5 31-34,38-39,46-58,61-63,69-100,102
+  s_c77f79b2e53d05::t_0f7d52dcb60080 101
+repos/payment-ingestion/src/payment_ingestion/tasks.py
+  s_7c550907d03284::t_aab9b6ac89a057 15,17,28-30,45-47,67-75,87-88,122-130,197-205,212,225
+  s_c77f79b2e53d05::t_116bbc47e77cd9 6,78,98,137,141,161,167,173,236,248
+repos/payment-validation/src/payment_validation/cli.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 5,9,11,15,35,38,47-48,61-63,65,83,87,98,131,139
+repos/payments-orchestrator/src/orchestrator/graph.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 57-63,70-72,91,99,132,143,150,152-155,165,168,174,177-178,180-182,188,190,192-193,198,201-206,211,218-234,250,255,257-259,264,269,271,277,289
+  s_8c311393a4e2c8::t_bb724dc792b21e 22,24,47-48,298-299
+repos/payment-notifications/src/payment_notifications/__init__.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 2-3
+repos/payment-validation/src/payment_validation/tasks.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 6,9,12,15,17,56,67,146
+  s_0bc8e58d7e4afc::t_9c44448d558cec 81,85-87,100-108,113,119-120,124-125,166-174
+repos/ledger-reconciliation/tests/test_ledger_posting.py
+  s_8c311393a4e2c8::t_5cec9d7236de00 1-148
+.github/workflows/ci.yml
+  s_c77f79b2e53d05::t_179ebe61aae06e 1-50
+repos/ledger-reconciliation/tests/test_ledger.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 8
+  s_8c311393a4e2c8::t_cf3aaf01b4ed8f 12
+repos/fx-enrichment/tests/test_fx_common.py
+  s_9a48d4817febd4::t_079a8022d1b068 1-9,11-161,165-168,170-174,178-179,181-182,185-241
+  s_9a48d4817febd4::t_862bac4cf73444 10,162-164,169,175-177,180
+  s_9a48d4817febd4::t_e6479afa43d61f 183-184
+README.md
+  s_c77f79b2e53d05::t_a437555760afec 67-78,80-83
+  s_c77f79b2e53d05::t_0f7d52dcb60080 79
+repos/settlement-reporting/src/settlement_reporting/cli.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 10,79,105-113,115-123
+  s_0bc8e58d7e4afc::t_2933645964ab49 97
+  s_0bc8e58d7e4afc::t_0a19f3c99ea3af 11-25,48-49,60-75,77-78,82,84-85,87-88,93-94,96,98-101,114,126-128,130,132,134-151
+repos/settlement-reporting/tests/test_report.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 15-84
+  s_0bc8e58d7e4afc::t_6a6685ab2eca24 3,5,7-9,14,85-105
+repos/fx-enrichment/src/fx_enrichment/common.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 8,56,65,101
+  s_9a48d4817febd4::t_017bcf5b2ed4c9 12,14-17,32,37,45,49,55,63-64,66-67,73,78,91,97,102-103,106,112-113,130-131
+repos/fx-enrichment/tests/test_fx_enrich.py
+  s_9a48d4817febd4::t_c44911dbdcaa2c 1-125,127-158
+  s_9a48d4817febd4::t_99d5b4f2b4a3be 126
+scripts/check.sh
+  s_c77f79b2e53d05::t_2455cee796d280 25
+  s_c77f79b2e53d05::t_dc7ec0e5392d8d 83
+  s_c77f79b2e53d05::t_3803c6e99d08d9 66-67
+  s_c77f79b2e53d05::t_d5d9056140d48c 40-42,44-45,47,51
+  s_c77f79b2e53d05::t_6f90ad8e23e820 6-11,17
+requirements-dev.txt
+  s_c77f79b2e53d05::t_e59fcb159c5829 1-429
+repos/payment-ingestion/src/payment_ingestion/cli.py
+  s_7c550907d03284::t_301ea8ca0daec4 10,14,16,24,37-50,60-61,74-76,78,96,100,117
+  s_c77f79b2e53d05::t_116bbc47e77cd9 5,111,144,152
+repos/exception-management/src/exception_management/classify.py
+  s_7c550907d03284::t_00617bcfc8be19 12,20,29,38,65
+  s_c77f79b2e53d05::t_116bbc47e77cd9 53-62,68-74
+repos/ledger-reconciliation/src/ledger_reconciliation/common.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 14,102,133-135
+  s_8c311393a4e2c8::t_918e4432f2d5f2 16-18,28-40,81,84,86-87,94,99,107,138,142-143,146,152-153,171
+repos/payment-notifications/src/payment_notifications/common.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 13,15
+  s_9a48d4817febd4::t_a8e1394016eae5 20-32,70,73-74,77-78,105,109-110,113,119-120,138
+repos/ledger-reconciliation/tests/test_ledger_cli.py
+  s_8c311393a4e2c8::t_7eff82b20fb6cc 1-118,120-193
+  s_8c311393a4e2c8::t_dfae9b0ec842f5 119
+runtimes/control-m/harness/verify_run.py
+  s_c77f79b2e53d05::t_116bbc47e77cd9 27-46,55-57,62,65-67,69-70,74,78,81,138-139,152-163,166-167,192-196,208,261-263,409,422-424,432-433,440-445,475,479,498-502,506-507,511-513,537-540
+  s_8c311393a4e2c8::t_e5d2242d0a375f 24
+scripts/check-file-sizes.sh
+  s_c77f79b2e53d05::t_a79c96285304d7 1-60
+repos/payments-orchestrator/tests/test_graph.py
+  s_8c311393a4e2c8::t_3bd16c4578e8d1 22,26,34,41,47,53,57,61,69,73
+repos/ledger-reconciliation/tests/ledger_test_support.py
+  s_8c311393a4e2c8::t_9730a9fd774aad 12,15,18-19
+  s_8c311393a4e2c8::t_680f98ca4c47c6 59
+  s_8c311393a4e2c8::t_1429f931324cbd 31-35,38-41
+  s_8c311393a4e2c8::t_70db3f544f12c8 1-11,13-14,16-17,20-30,36-37,42-58,60-93,95-99,101-105
+  s_8c311393a4e2c8::t_38a5975b6d5114 94,100
+repos/payment-notifications/tests/test_notify_cli.py
+  s_9a48d4817febd4::t_2d8ffe07242bca 1-219
+docs/migration-design.md
+  s_14f768e46dff93::t_bb13712f07a32b 1-303,305-421
+  s_14f768e46dff93::t_a5cde64c2d2602 304
+scripts/check-prereqs.sh
+  s_c77f79b2e53d05::t_a159e49c57deee 54
+repos/payment-notifications/tests/test_notify_common.py
+  s_9a48d4817febd4::t_83d057115a5720 1-156
+  s_9a48d4817febd4::t_f442250f04481b 157-158
+repos/payments-orchestrator/tests/test_graph_errors.py
+  s_8c311393a4e2c8::t_d5404ec53fb758 1-292
+  s_8c311393a4e2c8::t_2d8de2d6e214e7 293
+.gitignore
+  s_c77f79b2e53d05::t_0d4151c1f99a76 11-12,15-23
+repos/exception-management/tests/test_exceptions_cli.py
+  s_7c550907d03284::t_e7a1f099daa3db 1-208
+repos/exception-management/tests/test_exceptions_common.py
+  s_7c550907d03284::t_f254364053cd65 1-179
+repos/ledger-reconciliation/tests/test_cutoff.py
+  s_8c311393a4e2c8::t_ddd285b16f6687 19,22,25,30,37,47,55
+repos/payment-ingestion/tests/test_ingestion_cli.py
+  s_7c550907d03284::t_6b11dcdc6fd796 1-191
+repos/payment-ingestion/tests/test_ingestion_common.py
+  s_7c550907d03284::t_b669cc0f53e9d3 1-186
+repos/payment-ingestion/tests/test_ingestion_tasks.py
+  s_7c550907d03284::t_5bc8351781e9a4 1-261
+repos/payment-validation/tests/test_validation_cli.py
+  s_0bc8e58d7e4afc::t_a43e088543677e 1-191
+repos/payment-validation/tests/test_validation_common.py
+  s_0bc8e58d7e4afc::t_6ed91251e68351 1-213
+repos/payment-validation/tests/test_validation_tasks.py
+  s_0bc8e58d7e4afc::t_8c5e7e2146fea4 1-215
+repos/settlement-reporting/tests/test_settlement_common.py
+  s_0bc8e58d7e4afc::t_9498d89159f762 1-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7601515fbecf2bdf7adbf4e114393412f88f7ab8",
+  "prompts": {},
+  "sessions": {
+    "s_0bc8e58d7e4afc": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "593ff9d1-9dfe-4151-b47f-56752d6cffcf",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    },
+    "s_14f768e46dff93": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "4dae8cbe-bb74-4e8b-822e-6430a40d6784",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    },
+    "s_7c550907d03284": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "ddee264e-5ba3-4a56-8fc2-b39c09eb2925",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    },
+    "s_8c311393a4e2c8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "ff534604-ecec-4d34-bab3-0cacb1503a55",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    },
+    "s_9a48d4817febd4": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "8cec0eea-473d-4bcd-98f3-ff98991344b5",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    },
+    "s_c77f79b2e53d05": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "618963ab-e7b5-4892-a3a7-253a63abaff1",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    }
+  }
+}
