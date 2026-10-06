@@ -1,0 +1,267 @@
+.gitignore
+  s_3a633203de3586::t_70456816a12852 1-35
+fixtures/CONTRACT.md
+  s_3a633203de3586::t_ee08a779d7aa78 1-441
+fixtures/calendars/sg-business-calendar-2026.json
+  s_3a633203de3586::t_41f21620d14f56 1-53
+fixtures/fx/currency-allowlist.json
+  s_3a633203de3586::t_45887d7437d03d 1-17
+fixtures/fx/fx-rates.json
+  s_3a633203de3586::t_930cb30019a561 1-82
+fixtures/scenarios/business-cutoff/expected/manifest.json
+  s_3a633203de3586::t_56da407f882298 1-209
+fixtures/scenarios/business-cutoff/input/payments.csv
+  s_3a633203de3586::t_fa13dc45cf738c 1-7
+fixtures/scenarios/business-cutoff/reference/ledger.csv
+  s_3a633203de3586::t_90939c1334f6c5 1-7
+fixtures/scenarios/business-cutoff/scenario.json
+  s_3a633203de3586::t_710aaacbabf510 1-105
+fixtures/scenarios/duplicate-retry/expected/manifest.json
+  s_3a633203de3586::t_0278bed4aa89fd 1-226
+fixtures/scenarios/duplicate-retry/input/payments.csv
+  s_3a633203de3586::t_27e18e6f81d3d2 1-9
+fixtures/scenarios/duplicate-retry/reference/ledger.csv
+  s_3a633203de3586::t_353f37b8ce6c5a 1-7
+fixtures/scenarios/duplicate-retry/scenario.json
+  s_3a633203de3586::t_7deba599cf1d25 1-110
+fixtures/scenarios/happy-path/expected/manifest.json
+  s_3a633203de3586::t_e88b9bc02b5670 1-204
+fixtures/scenarios/happy-path/input/payments.csv
+  s_3a633203de3586::t_517668d26f1059 1-7
+fixtures/scenarios/happy-path/reference/ledger.csv
+  s_3a633203de3586::t_45af5a98c61097 1-7
+fixtures/scenarios/happy-path/scenario.json
+  s_3a633203de3586::t_937fbf33c4b313 1-104
+fixtures/scenarios/partial-ledger-write/expected/manifest.json
+  s_3a633203de3586::t_fe26ac37aa44e5 1-240
+fixtures/scenarios/partial-ledger-write/input/payments.csv
+  s_3a633203de3586::t_9a2c8dc0c29e42 1-8
+fixtures/scenarios/partial-ledger-write/reference/ledger.csv
+  s_3a633203de3586::t_2e551b166b66bc 1-8
+fixtures/scenarios/partial-ledger-write/scenario.json
+  s_3a633203de3586::t_d1609ddb2c5c96 1-121
+fixtures/scenarios/reconciliation-breaks/expected/manifest.json
+  s_3a633203de3586::t_af93f460c6a986 1-260
+fixtures/scenarios/reconciliation-breaks/input/payments.csv
+  s_3a633203de3586::t_8566cdcd3cd7d5 1-12
+fixtures/scenarios/reconciliation-breaks/reference/ledger.csv
+  s_3a633203de3586::t_8badc70e593ee9 1-9
+fixtures/scenarios/reconciliation-breaks/scenario.json
+  s_3a633203de3586::t_2ed2ae87995b56 1-105
+repos/exception-management/.gitignore
+  s_3a633203de3586::t_691bcd2afe7935 1-6
+repos/exception-management/README.md
+  s_3a633203de3586::t_5b9cecc6bd2e9a 1-24
+repos/exception-management/STDLIB_ONLY
+  s_3a633203de3586::t_017660e3298812 1-2
+repos/exception-management/scripts/run-task.sh
+  s_3a633203de3586::t_faceb45c1314aa 1-20
+repos/exception-management/scripts/test.sh
+  s_3a633203de3586::t_32d545ab56dbc7 1-9
+repos/exception-management/src/exception_management/__init__.py
+  s_3a633203de3586::t_250412b5e38c1b 1-2
+repos/exception-management/src/exception_management/classify.py
+  s_3a633203de3586::t_439446ebb03c0e 1-71
+repos/exception-management/src/exception_management/cli.py
+  s_3a633203de3586::t_7d3208b2fd289a 1-106
+repos/exception-management/src/exception_management/common.py
+  s_3a633203de3586::t_13e65fd4490921 1-151
+repos/exception-management/tests/test_classify.py
+  s_3a633203de3586::t_274ba5f673b407 1-38
+repos/fx-enrichment/.gitignore
+  s_3a633203de3586::t_6200ceac1f7792 1-6
+repos/fx-enrichment/README.md
+  s_3a633203de3586::t_dda73eae5c9c63 1-33
+repos/fx-enrichment/STDLIB_ONLY
+  s_3a633203de3586::t_b8770901af5d92 1-2
+repos/fx-enrichment/scripts/run-task.sh
+  s_3a633203de3586::t_29e5639a917e12 1-10
+repos/fx-enrichment/scripts/test.sh
+  s_3a633203de3586::t_407fb07c513956 1-10
+repos/fx-enrichment/src/fx_enrichment/__init__.py
+  s_3a633203de3586::t_3d913449491296 1-5
+repos/fx-enrichment/src/fx_enrichment/cli.py
+  s_3a633203de3586::t_0431e194cb6be9 1-131
+repos/fx-enrichment/src/fx_enrichment/common.py
+  s_3a633203de3586::t_72972642020828 1-140
+repos/fx-enrichment/src/fx_enrichment/tasks.py
+  s_3a633203de3586::t_6364def442b754 1-103
+repos/fx-enrichment/tests/test_fx.py
+  s_3a633203de3586::t_14581180b3bae3 1-63
+repos/ledger-reconciliation/.gitignore
+  s_3a633203de3586::t_55e8e57e89adcf 1-6
+repos/ledger-reconciliation/README.md
+  s_3a633203de3586::t_bf92d26e747913 1-34
+repos/ledger-reconciliation/STDLIB_ONLY
+  s_3a633203de3586::t_058c2308a5cbdc 1-2
+repos/ledger-reconciliation/schema/ledger.sql
+  s_3a633203de3586::t_a4690a13b4f3df 1-16
+repos/ledger-reconciliation/scripts/run-task.sh
+  s_3a633203de3586::t_b5cb4b7bd1f447 1-21
+repos/ledger-reconciliation/scripts/test.sh
+  s_3a633203de3586::t_f8ed8d33b66faf 1-9
+repos/ledger-reconciliation/src/ledger_reconciliation/__init__.py
+  s_3a633203de3586::t_7ba4170ce80c09 1-3
+repos/ledger-reconciliation/src/ledger_reconciliation/cli.py
+  s_3a633203de3586::t_e3807c6741a4ce 1-139
+repos/ledger-reconciliation/src/ledger_reconciliation/common.py
+  s_3a633203de3586::t_1edf33329ad30b 1-159
+repos/ledger-reconciliation/src/ledger_reconciliation/cutoff.py
+  s_3a633203de3586::t_06a4d2594d0caa 1-151
+repos/ledger-reconciliation/src/ledger_reconciliation/ledger.py
+  s_3a633203de3586::t_215244fb4ac6f9 1-187
+repos/ledger-reconciliation/src/ledger_reconciliation/reconcile.py
+  s_3a633203de3586::t_677f4ef8b90b16 1-173
+repos/ledger-reconciliation/tests/test_cutoff.py
+  s_3a633203de3586::t_63b4c2a3cbbc43 1-66
+repos/ledger-reconciliation/tests/test_ledger.py
+  s_3a633203de3586::t_1aef2a61afa766 1-49
+repos/ledger-reconciliation/tests/test_reconcile.py
+  s_3a633203de3586::t_14abe9a3e3af99 1-46
+repos/payment-ingestion/.gitignore
+  s_3a633203de3586::t_1e99cf3458f534 1-6
+repos/payment-ingestion/README.md
+  s_3a633203de3586::t_17ef0bb8c097e7 1-33
+repos/payment-ingestion/STDLIB_ONLY
+  s_3a633203de3586::t_6012efb07ac51b 1-2
+repos/payment-ingestion/scripts/run-task.sh
+  s_3a633203de3586::t_47c3f9d4ad1d2c 1-10
+repos/payment-ingestion/scripts/test.sh
+  s_3a633203de3586::t_9c44ed66c5bf8e 1-10
+repos/payment-ingestion/src/payment_ingestion/__init__.py
+  s_3a633203de3586::t_7462d82c076204 1-5
+repos/payment-ingestion/src/payment_ingestion/cli.py
+  s_3a633203de3586::t_05fb531e59ec22 1-133
+repos/payment-ingestion/src/payment_ingestion/common.py
+  s_3a633203de3586::t_7c7fa3df8edd8c 1-147
+repos/payment-ingestion/src/payment_ingestion/tasks.py
+  s_3a633203de3586::t_3dc7a8b67a967d 1-234
+repos/payment-ingestion/tests/test_header_and_hash.py
+  s_3a633203de3586::t_b2d31e544d7f97 1-112
+repos/payment-notifications/.gitignore
+  s_3a633203de3586::t_83ce184575bc97 1-6
+repos/payment-notifications/README.md
+  s_3a633203de3586::t_2adf186d51bbe0 1-26
+repos/payment-notifications/STDLIB_ONLY
+  s_3a633203de3586::t_d56c941e175795 1-2
+repos/payment-notifications/scripts/run-task.sh
+  s_3a633203de3586::t_d762ee54a91fe4 1-20
+repos/payment-notifications/scripts/test.sh
+  s_3a633203de3586::t_4e2f98c2b7822e 1-9
+repos/payment-notifications/src/payment_notifications/__init__.py
+  s_3a633203de3586::t_d5c876a0bbf799 1-2
+repos/payment-notifications/src/payment_notifications/cli.py
+  s_3a633203de3586::t_3c5ed84dbc4b36 1-106
+repos/payment-notifications/src/payment_notifications/common.py
+  s_3a633203de3586::t_c51f3045bc7ace 1-122
+repos/payment-notifications/src/payment_notifications/notify.py
+  s_3a633203de3586::t_96ec4e1469a602 1-65
+repos/payment-notifications/tests/test_notify.py
+  s_3a633203de3586::t_17e1eb5c590582 1-58
+repos/payment-validation/.gitignore
+  s_3a633203de3586::t_32151752f17260 1-6
+repos/payment-validation/README.md
+  s_3a633203de3586::t_7ea2449df9c576 1-32
+repos/payment-validation/STDLIB_ONLY
+  s_3a633203de3586::t_bf8f0735048e92 1-2
+repos/payment-validation/scripts/run-task.sh
+  s_3a633203de3586::t_7002485ff04abf 1-10
+repos/payment-validation/scripts/test.sh
+  s_3a633203de3586::t_4245c282ad81f6 1-10
+repos/payment-validation/src/payment_validation/__init__.py
+  s_3a633203de3586::t_4264b1d303501e 1-5
+repos/payment-validation/src/payment_validation/cli.py
+  s_3a633203de3586::t_7d421022cc7578 1-136
+repos/payment-validation/src/payment_validation/common.py
+  s_3a633203de3586::t_be19e0db870b6b 1-145
+repos/payment-validation/src/payment_validation/tasks.py
+  s_3a633203de3586::t_370b4b112dc4c9 1-194
+repos/payment-validation/tests/test_validate.py
+  s_3a633203de3586::t_28d17093229146 1-104
+repos/payments-orchestrator/.gitignore
+  s_3a633203de3586::t_4e5aff991d7b2d 1-11
+repos/payments-orchestrator/README.md
+  s_3a633203de3586::t_b2920260fb994a 1-74
+repos/payments-orchestrator/STDLIB_ONLY
+  s_3a633203de3586::t_2db3b77cd65907 1-6
+repos/payments-orchestrator/controlm/calendars.json
+  s_3a633203de3586::t_f5d6a8a249523f 1-27
+repos/payments-orchestrator/controlm/payments_reconciliation.json
+  s_3a633203de3586::t_6fac8caa623f27 1-278
+repos/payments-orchestrator/controlm/payments_reconciliation.xml
+  s_3a633203de3586::t_117cc2b0c6e928 1-301
+repos/payments-orchestrator/controlm/task-commands.json
+  s_3a633203de3586::t_c4a07960b3b045 1-129
+repos/payments-orchestrator/scripts/run-task.sh
+  s_3a633203de3586::t_761831cc410e84 1-122
+repos/payments-orchestrator/scripts/test.sh
+  s_3a633203de3586::t_22709f2c4216a1 1-20
+repos/payments-orchestrator/src/orchestrator/__init__.py
+  s_3a633203de3586::t_50ea699d383c30 1
+repos/payments-orchestrator/src/orchestrator/graph.py
+  s_3a633203de3586::t_704e242951cae2 1-295
+repos/payments-orchestrator/tests/test_graph.py
+  s_3a633203de3586::t_8142b64f74b73b 1-79
+repos/settlement-reporting/.gitignore
+  s_3a633203de3586::t_261d90f61d1054 1-6
+repos/settlement-reporting/README.md
+  s_3a633203de3586::t_dd3d8c5de542ff 1-24
+repos/settlement-reporting/STDLIB_ONLY
+  s_3a633203de3586::t_b04389ddd0ec50 1-2
+repos/settlement-reporting/scripts/run-task.sh
+  s_3a633203de3586::t_6f42bca02bbb7f 1-20
+repos/settlement-reporting/scripts/test.sh
+  s_3a633203de3586::t_4f44a3e8051b76 1-9
+repos/settlement-reporting/src/settlement_reporting/__init__.py
+  s_3a633203de3586::t_47ec6445902079 1-2
+repos/settlement-reporting/src/settlement_reporting/cli.py
+  s_3a633203de3586::t_92916d92c64b36 1-106
+repos/settlement-reporting/src/settlement_reporting/common.py
+  s_3a633203de3586::t_6a744eecbeb288 1-149
+repos/settlement-reporting/src/settlement_reporting/report.py
+  s_3a633203de3586::t_8b79a0cf2d166b 1-296
+repos/settlement-reporting/tests/test_report.py
+  s_3a633203de3586::t_bd72ef7f679ed6 1-51
+runtimes/control-m/harness/harness.py
+  s_3a633203de3586::t_9f8e338822728d 1-609
+runtimes/control-m/harness/verify_run.py
+  s_3a633203de3586::t_a79a0e990dd5a6 1-503
+runtimes/control-m/workbench/workbench.env
+  s_3a633203de3586::t_2913c865e5bd05 1-33
+scripts/check-prereqs.sh
+  s_3a633203de3586::t_cd1352a14c8a63 1-86
+scripts/controlm-down.sh
+  s_3a633203de3586::t_0f2729caddce4c 1-34
+scripts/controlm-run.sh
+  s_3a633203de3586::t_8ef2ed995ea427 1-87
+scripts/controlm-up.sh
+  s_3a633203de3586::t_4801f599c1d2fe 1-227
+scripts/controlm-validate.sh
+  s_3a633203de3586::t_2d5d48ba49bef4 1-114
+scripts/lib/common.sh
+  s_3a633203de3586::t_966dfb1684ed01 1-88
+scripts/test-controlm-compatibility.sh
+  s_3a633203de3586::t_71819c22e85b31 1-167
+BUILD_PROMPT.md
+  s_3a633203de3586::t_30a8c9db6df22a 1-39
+PARTICIPANT_CHECKLIST.md
+  s_3a633203de3586::t_d0d6001f379b33 1-277
+README.md
+  s_3a633203de3586::t_adaf95b88fa607 1-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5a516aef5dec77b928f4b1d556a4f4053be1399",
+  "prompts": {},
+  "sessions": {
+    "s_3a633203de3586": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "b79e8ab1-a4e6-40c3-ae17-01309c6f3e86",
+        "model": "claude-opus-5-5-fast"
+      },
+      "human_author": "Ben Miller <benmiller169@gmail.com>"
+    }
+  }
+}
