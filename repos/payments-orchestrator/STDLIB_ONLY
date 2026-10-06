@@ -1,0 +1,6 @@
+This repository depends on the Python standard library only.
+
+No third-party packages are required and no virtual environment is needed.
+Python 3.11 or later is expected, for zoneinfo and current typing syntax.
+
+Deliberately no pyproject.toml: there is nothing to build or install here.

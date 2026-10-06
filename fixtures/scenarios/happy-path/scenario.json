@@ -1,0 +1,104 @@
+{
+  "calendar": "fixtures/calendars/sg-business-calendar-2026.json",
+  "clock": {
+    "fixedUtc": "2026-03-16T09:30:00Z",
+    "timezone": "Asia/Singapore"
+  },
+  "currencyAllowlist": "fixtures/fx/currency-allowlist.json",
+  "cutoff": {
+    "localTime": "17:00",
+    "timezone": "Asia/Singapore"
+  },
+  "description": "Six unique, well-formed cross-border payments booked before the local cutoff on a business day. Everything is accepted, posted, and matched.",
+  "expected": {
+    "manifest": "expected/manifest.json"
+  },
+  "expectedCounts": {
+    "accepted": 6,
+    "broken": 0,
+    "cutoffAdjusted": 0,
+    "duplicatesRemoved": 0,
+    "matched": 6,
+    "posted": 6,
+    "received": 6,
+    "rejected": 0
+  },
+  "expectedExitSequence": [
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "watch_inbound_files"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "verify_file_integrity"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "extract_payment_batch"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "validate_payment_schema"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "deduplicate_payments"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "enrich_fx_rates"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "apply_business_day_cutoff"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "post_pending_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "reconcile_nostro_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "classify_breaks"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "produce_settlement_report"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "archive_and_notify"
+    }
+  ],
+  "expectedInvariants": {
+    "INV-COUNTS-RECONCILE": true,
+    "INV-DETERMINISTIC-RERUN": true,
+    "INV-INPUT-IMMUTABLE": true,
+    "INV-SINGLE-POSTING": true,
+    "INV-TRACEABLE-OUTPUT": true
+  },
+  "faultInjection": null,
+  "fxTable": "fixtures/fx/fx-rates.json",
+  "id": "happy-path",
+  "name": "Happy path",
+  "provenance": "scenario",
+  "rerun": null,
+  "retryRequired": false,
+  "scenarioVersion": "1.0.0",
+  "workflow": "PAYOPS_CROSS_BORDER_RECONCILIATION"
+}

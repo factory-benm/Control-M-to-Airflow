@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Legacy Control-M XML export for the cross-border payments reconciliation
+  workflow, kept from the previous scheduler migration.
+
+  It must stay semantically equivalent to payments_reconciliation.json.
+  scripts/test-controlm-compatibility.sh asserts that the JSON, this XML, and
+  the task-command mapping agree on task names, edges, and retry limits.
+-->
+<DEFTABLE xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <FOLDER
+    DATACENTER="PAYOPS-CTM"
+    VERSION="900"
+    PLATFORM="UNIX"
+    FOLDER_NAME="PAYOPS_CROSS_BORDER_RECONCILIATION"
+    FOLDER_ORDER_METHOD="Manual"
+    TYPE="0"
+    USED_BY_CODE="0">
+
+    <JOB
+      JOBNAME="watch_inbound_files"
+      DESCRIPTION="Wait for the inbound payments batch file to arrive for the business date."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="watch_inbound_files"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task watch_inbound_files --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      TIMEFROM="2000"
+      TIMETO="0600"
+      CONFIRM="0"
+      CRITICAL="1">
+      <VARIABLE NAME="%%RUN_ID" VALUE="baseline-happy-path"/>
+      <VARIABLE NAME="%%SCENARIO" VALUE="happy-path"/>
+      <VARIABLE NAME="%%ATTEMPT" VALUE="1"/>
+      <OUTCOND NAME="PAYOPS-WATCH_INBOUND_FILES-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="watch_inbound_files failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="verify_file_integrity"
+      DESCRIPTION="Verify the SHA-256 content hash of the inbound batch and the nostro reference extract."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="verify_file_integrity"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task verify_file_integrity --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-WATCH_INBOUND_FILES-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-WATCH_INBOUND_FILES-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-VERIFY_FILE_INTEGRITY-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="verify_file_integrity failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="extract_payment_batch"
+      DESCRIPTION="Extract and normalize payment rows from the verified inbound batch."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="extract_payment_batch"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task extract_payment_batch --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-VERIFY_FILE_INTEGRITY-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-VERIFY_FILE_INTEGRITY-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-EXTRACT_PAYMENT_BATCH-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="extract_payment_batch failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="validate_payment_schema"
+      DESCRIPTION="Validate required fields, currency allowlist, and amount rules. Rejections are written to the rejection ledger."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="validate_payment_schema"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task validate_payment_schema --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-EXTRACT_PAYMENT_BATCH-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-EXTRACT_PAYMENT_BATCH-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="validate_payment_schema failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="deduplicate_payments"
+      DESCRIPTION="Remove repeated payment_id values within the batch, keeping the first occurrence."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="deduplicate_payments"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task deduplicate_payments --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-DEDUPLICATE_PAYMENTS-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="deduplicate_payments failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="enrich_fx_rates"
+      DESCRIPTION="Look up the versioned FX rate by value date and currency, then compute the base-currency amount."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="enrich_fx_rates"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task enrich_fx_rates --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-DEDUPLICATE_PAYMENTS-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-DEDUPLICATE_PAYMENTS-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-ENRICH_FX_RATES-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="enrich_fx_rates failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="apply_business_day_cutoff"
+      DESCRIPTION="Apply the 17:00 Asia/Singapore cutoff and the PAYOPS_SG_BUSINESS_2026 calendar to derive the effective value date."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="apply_business_day_cutoff"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task apply_business_day_cutoff --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-ENRICH_FX_RATES-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-ENRICH_FX_RATES-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="apply_business_day_cutoff failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="post_pending_ledger"
+      DESCRIPTION="Idempotently post pending ledger entries. Safe to rerun after a partial write; a payment_id is posted at most once."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="post_pending_ledger"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task post_pending_ledger --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="2"
+      RERUNINTERVAL="00001M"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-POST_PENDING_LEDGER-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="U" DEST="payments-operations@payops.invalid" SUBJECT="post_pending_ledger failed" MESSAGE="Ledger posting failed for run %%RUN_ID scenario %%SCENARIO. Rerun is safe: posting is idempotent by payment_id."/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="reconcile_nostro_ledger"
+      DESCRIPTION="Match posted ledger entries against the nostro reference extract and record breaks."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="reconcile_nostro_ledger"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task reconcile_nostro_ledger --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-POST_PENDING_LEDGER-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-POST_PENDING_LEDGER-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-RECONCILE_NOSTRO_LEDGER-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="reconcile_nostro_ledger failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="classify_breaks"
+      DESCRIPTION="Classify reconciliation breaks into severity and owning operations team."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="classify_breaks"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task classify_breaks --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="0">
+      <INCOND NAME="PAYOPS-RECONCILE_NOSTRO_LEDGER-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-RECONCILE_NOSTRO_LEDGER-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-CLASSIFY_BREAKS-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="reconciliation-operations@payops.invalid" SUBJECT="classify_breaks failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="produce_settlement_report"
+      DESCRIPTION="Produce the settlement report, archive manifest, and stage count summary."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="produce_settlement_report"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task produce_settlement_report --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="1">
+      <INCOND NAME="PAYOPS-CLASSIFY_BREAKS-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-CLASSIFY_BREAKS-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="settlement-reporting@payops.invalid" SUBJECT="produce_settlement_report failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+    <JOB
+      JOBNAME="archive_and_notify"
+      DESCRIPTION="Archive run artifacts and build the operations notification payload. Does not send a message."
+      APPLICATION="PAYOPS"
+      SUB_APPLICATION="CROSS_BORDER_RECONCILIATION"
+      MEMNAME="archive_and_notify"
+      RUN_AS="payops"
+      NODEID="payops-batch-host"
+      TASKTYPE="Command"
+      CMDLINE="%%ORCHESTRATOR_HOME/scripts/run-task.sh --task archive_and_notify --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT"
+      MAXRERUN="0"
+      WEEKDAYS="12345"
+      DAYSCAL="PAYOPS_SG_BUSINESS_2026"
+      CONFIRM="0"
+      CRITICAL="0">
+      <INCOND NAME="PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK" ODATE="ODAT" AND_OR="A"/>
+      <OUTCOND NAME="PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK" ODATE="ODAT" SIGN="-"/>
+      <OUTCOND NAME="PAYOPS-ARCHIVE_AND_NOTIFY-OK" ODATE="ODAT" SIGN="+"/>
+      <ON STMT="*" CODE="NOTOK">
+        <DOMAIL URGENCY="R" DEST="payments-operations@payops.invalid" SUBJECT="archive_and_notify failed" MESSAGE="Job failed for run %%RUN_ID scenario %%SCENARIO"/>
+      </ON>
+    </JOB>
+
+  </FOLDER>
+</DEFTABLE>

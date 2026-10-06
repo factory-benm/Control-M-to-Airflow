@@ -1,0 +1,35 @@
+# Local runtime state: run directories, ledgers, runtime selection
+/workspace/
+
+# Control-M runtime state
+/runtimes/control-m/workbench/state/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Databases and runtime artifacts
+*.sqlite3
+*.sqlite3-journal
+*.db
+
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+token.json
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

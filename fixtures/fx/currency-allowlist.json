@@ -1,0 +1,17 @@
+{
+  "allowlistVersion": "2026.03",
+  "baseCurrency": "USD",
+  "currencies": [
+    "AED",
+    "CNY",
+    "EUR",
+    "GBP",
+    "HKD",
+    "INR",
+    "JPY",
+    "KES",
+    "SGD",
+    "USD"
+  ],
+  "provenance": "scenario"
+}

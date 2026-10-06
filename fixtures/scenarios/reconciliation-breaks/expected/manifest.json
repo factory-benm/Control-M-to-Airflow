@@ -1,0 +1,260 @@
+{
+  "baseAmounts": {
+    "PAY-2026-0041": "10653.50",
+    "PAY-2026-0042": "39000.00",
+    "PAY-2026-0043": "9984.00",
+    "PAY-2026-0044": "28448.00",
+    "PAY-2026-0045": "18228.00",
+    "PAY-2026-0046": "15776.00",
+    "PAY-2026-0047": "25200.00",
+    "PAY-2026-0048": "24464.00",
+    "PAY-2026-0051": "25460.00"
+  },
+  "breaks": [
+    {
+      "owner_team": "Reconciliation Operations",
+      "payment_id": "PAY-2026-0043",
+      "reason_code": "AMOUNT_MISMATCH",
+      "severity": "medium"
+    },
+    {
+      "owner_team": "Nostro Operations",
+      "payment_id": "PAY-2026-0044",
+      "reason_code": "MISSING_LEDGER_REFERENCE",
+      "severity": "high"
+    },
+    {
+      "owner_team": "FX Operations",
+      "payment_id": "PAY-2026-0045",
+      "reason_code": "CURRENCY_MISMATCH",
+      "severity": "high"
+    },
+    {
+      "owner_team": "Payments Investigations",
+      "payment_id": "PAY-2026-0051",
+      "reason_code": "UNMATCHED_PAYMENT",
+      "severity": "medium"
+    }
+  ],
+  "calendarId": "PAYOPS-SG-2026",
+  "countEquations": [
+    "received == rejected + duplicatesRemoved + accepted",
+    "accepted == posted",
+    "posted == matched + broken"
+  ],
+  "counts": {
+    "accepted": 9,
+    "broken": 4,
+    "cutoffAdjusted": 0,
+    "duplicatesRemoved": 0,
+    "matched": 5,
+    "posted": 9,
+    "received": 11,
+    "rejected": 2
+  },
+  "currencyAllowlistVersion": "2026.03",
+  "duplicates": [],
+  "effectiveValueDates": {
+    "PAY-2026-0041": "2026-03-16",
+    "PAY-2026-0042": "2026-03-16",
+    "PAY-2026-0043": "2026-03-16",
+    "PAY-2026-0044": "2026-03-16",
+    "PAY-2026-0045": "2026-03-16",
+    "PAY-2026-0046": "2026-03-16",
+    "PAY-2026-0047": "2026-03-16",
+    "PAY-2026-0048": "2026-03-16",
+    "PAY-2026-0051": "2026-03-16"
+  },
+  "expectedArtifacts": [
+    "input/ledger.csv",
+    "input/payments.csv",
+    "ledger/ledger.sqlite3",
+    "output/archive-manifest.json",
+    "output/notification.json",
+    "output/settlement-report.csv",
+    "output/settlement-report.json",
+    "run-manifest.json",
+    "runtime.json",
+    "stages/breaks.jsonl",
+    "stages/classified-breaks.jsonl",
+    "stages/cutoff-payments.jsonl",
+    "stages/cutoff.json",
+    "stages/deduplicate.json",
+    "stages/deduplicated-payments.jsonl",
+    "stages/duplicates.jsonl",
+    "stages/enriched-payments.jsonl",
+    "stages/exceptions.json",
+    "stages/extract.json",
+    "stages/file-integrity.json",
+    "stages/fx.json",
+    "stages/inbound-manifest.json",
+    "stages/ledger-posting.json",
+    "stages/matched.jsonl",
+    "stages/normalized-payments.jsonl",
+    "stages/notify.json",
+    "stages/reconciliation.json",
+    "stages/rejections.jsonl",
+    "stages/reporting.json",
+    "stages/validate.json",
+    "stages/validated-payments.jsonl"
+  ],
+  "expectedExitSequence": [
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "watch_inbound_files"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "verify_file_integrity"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "extract_payment_batch"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "validate_payment_schema"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "deduplicate_payments"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "enrich_fx_rates"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "apply_business_day_cutoff"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "post_pending_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "reconcile_nostro_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "classify_breaks"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "produce_settlement_report"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "archive_and_notify"
+    }
+  ],
+  "fxRatesUsed": {
+    "PAY-2026-0041": {
+      "rate": "0.745000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0042": {
+      "rate": "1.000000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0043": {
+      "rate": "0.128000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0044": {
+      "rate": "1.270000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0045": {
+      "rate": "1.085000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0046": {
+      "rate": "0.272000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0047": {
+      "rate": "0.012000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0048": {
+      "rate": "0.139000",
+      "rateDate": "2026-03-16"
+    },
+    "PAY-2026-0051": {
+      "rate": "0.006700",
+      "rateDate": "2026-03-16"
+    }
+  },
+  "fxTableVersion": "2026.03.1",
+  "inputs": {
+    "payments": "input/payments.csv",
+    "reference": "reference/ledger.csv"
+  },
+  "invariants": [
+    {
+      "description": "A payment_id is posted to the ledger at most once.",
+      "expected": true,
+      "id": "INV-SINGLE-POSTING"
+    },
+    {
+      "description": "Reconciliation breaks are classified and excluded from the matched count.",
+      "expected": true,
+      "id": "INV-BREAKS-EXCLUDED"
+    },
+    {
+      "description": "Input files are immutable and identified by content hash.",
+      "expected": true,
+      "id": "INV-INPUT-IMMUTABLE"
+    },
+    {
+      "description": "Counts reconcile at every stage.",
+      "expected": true,
+      "id": "INV-COUNTS-RECONCILE"
+    },
+    {
+      "description": "Every record in an output traces to an input file and run identifier.",
+      "expected": true,
+      "id": "INV-TRACEABLE-OUTPUT"
+    },
+    {
+      "description": "Re-running the same fixture produces equivalent normalized outputs.",
+      "expected": true,
+      "id": "INV-DETERMINISTIC-RERUN"
+    }
+  ],
+  "manifestVersion": "1.0.0",
+  "matchedPaymentIds": [
+    "PAY-2026-0041",
+    "PAY-2026-0042",
+    "PAY-2026-0046",
+    "PAY-2026-0047",
+    "PAY-2026-0048"
+  ],
+  "provenance": "scenario",
+  "rejections": [
+    {
+      "payment_id": "PAY-2026-0049",
+      "reason_code": "CURRENCY_NOT_ALLOWED"
+    },
+    {
+      "payment_id": "PAY-2026-0050",
+      "reason_code": "NON_POSITIVE_AMOUNT"
+    }
+  ],
+  "scenario": "reconciliation-breaks",
+  "scenarioVersion": "1.0.0",
+  "workflow": "PAYOPS_CROSS_BORDER_RECONCILIATION"
+}

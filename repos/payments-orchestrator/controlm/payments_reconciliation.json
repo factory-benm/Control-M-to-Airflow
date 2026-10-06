@@ -1,0 +1,278 @@
+{
+  "Defaults": {
+    "Application": "PAYOPS",
+    "SubApplication": "CROSS_BORDER_RECONCILIATION",
+    "RunAs": "payops",
+    "Host": "payops-batch-host",
+    "Variables": [
+      { "RUN_ID": "baseline-happy-path" },
+      { "SCENARIO": "happy-path" },
+      { "RUN_DIR": "/workspace/runtime/runs/baseline-happy-path" },
+      { "KIT_ROOT": "/workspace" },
+      { "ORCHESTRATOR_HOME": "/workspace/repos/payments-orchestrator" },
+      { "FIXED_CLOCK": "2026-03-16T09:30:00Z" },
+      { "ATTEMPT": "1" }
+    ],
+    "Job": {
+      "When": {
+        "WeekDays": ["MON", "TUE", "WED", "THU", "FRI"],
+        "MonthDays": ["NONE"],
+        "RuleBasedCalendars": {
+          "Included": ["PAYOPS_SG_BUSINESS_2026"]
+        },
+        "FromTime": "2000",
+        "ToTime": "0600"
+      },
+      "ActionIfFailure": {
+        "Type": "If",
+        "CompletionStatus": "NOTOK",
+        "notifyPaymentsOperations": {
+          "Type": "Mail",
+          "Message": "%%JOBNAME failed for run %%RUN_ID scenario %%SCENARIO",
+          "To": "payments-operations@payops.invalid"
+        }
+      }
+    }
+  },
+
+  "PAYOPS_CROSS_BORDER_RECONCILIATION": {
+    "Type": "Folder",
+    "ControlmServer": "PAYOPS-CTM",
+    "OrderMethod": "Manual",
+    "Comment": "Cross-border payments reconciliation batch.",
+
+    "watch_inbound_files": {
+      "Type": "Job:Command",
+      "Description": "Wait for the inbound payments batch file to arrive for the business date.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task watch_inbound_files --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-WATCH_INBOUND_FILES-OK" }]
+      }
+    },
+
+    "verify_file_integrity": {
+      "Type": "Job:Command",
+      "Description": "Verify the SHA-256 content hash of the inbound batch and the nostro reference extract.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task verify_file_integrity --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-WATCH_INBOUND_FILES-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-WATCH_INBOUND_FILES-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-VERIFY_FILE_INTEGRITY-OK" }]
+      }
+    },
+
+    "extract_payment_batch": {
+      "Type": "Job:Command",
+      "Description": "Extract and normalize payment rows from the verified inbound batch.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task extract_payment_batch --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-VERIFY_FILE_INTEGRITY-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-VERIFY_FILE_INTEGRITY-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-EXTRACT_PAYMENT_BATCH-OK" }]
+      }
+    },
+
+    "validate_payment_schema": {
+      "Type": "Job:Command",
+      "Description": "Validate required fields, currency allowlist, and amount rules. Rejections are written to the rejection ledger.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task validate_payment_schema --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-EXTRACT_PAYMENT_BATCH-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-EXTRACT_PAYMENT_BATCH-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK" }]
+      }
+    },
+
+    "deduplicate_payments": {
+      "Type": "Job:Command",
+      "Description": "Remove repeated payment_id values within the batch, keeping the first occurrence.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task deduplicate_payments --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-DEDUPLICATE_PAYMENTS-OK" }]
+      }
+    },
+
+    "enrich_fx_rates": {
+      "Type": "Job:Command",
+      "Description": "Look up the versioned FX rate by value date and currency, then compute the base-currency amount.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task enrich_fx_rates --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-DEDUPLICATE_PAYMENTS-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-DEDUPLICATE_PAYMENTS-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-ENRICH_FX_RATES-OK" }]
+      }
+    },
+
+    "apply_business_day_cutoff": {
+      "Type": "Job:Command",
+      "Description": "Apply the 17:00 Asia/Singapore cutoff and the PAYOPS_SG_BUSINESS_2026 calendar to derive the effective value date.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task apply_business_day_cutoff --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-ENRICH_FX_RATES-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-ENRICH_FX_RATES-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK" }]
+      }
+    },
+
+    "post_pending_ledger": {
+      "Type": "Job:Command",
+      "Description": "Idempotently post pending ledger entries. Safe to rerun after a partial write; a payment_id is posted at most once.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task post_pending_ledger --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "RerunLimit": {
+        "Times": "2"
+      },
+      "Rerun": {
+        "Every": "1",
+        "Units": "Minutes",
+        "From": "End"
+      },
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-POST_PENDING_LEDGER-OK" }]
+      }
+    },
+
+    "reconcile_nostro_ledger": {
+      "Type": "Job:Command",
+      "Description": "Match posted ledger entries against the nostro reference extract and record breaks.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task reconcile_nostro_ledger --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-POST_PENDING_LEDGER-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-POST_PENDING_LEDGER-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-RECONCILE_NOSTRO_LEDGER-OK" }]
+      }
+    },
+
+    "classify_breaks": {
+      "Type": "Job:Command",
+      "Description": "Classify reconciliation breaks into severity and owning operations team.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task classify_breaks --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-RECONCILE_NOSTRO_LEDGER-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-RECONCILE_NOSTRO_LEDGER-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-CLASSIFY_BREAKS-OK" }]
+      }
+    },
+
+    "produce_settlement_report": {
+      "Type": "Job:Command",
+      "Description": "Produce the settlement report, archive manifest, and stage count summary.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task produce_settlement_report --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-CLASSIFY_BREAKS-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-CLASSIFY_BREAKS-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK" }]
+      }
+    },
+
+    "archive_and_notify": {
+      "Type": "Job:Command",
+      "Description": "Archive run artifacts and build the operations notification payload. Does not send a message.",
+      "Command": "%%ORCHESTRATOR_HOME/scripts/run-task.sh --task archive_and_notify --run-dir %%RUN_DIR --scenario %%SCENARIO --run-id %%RUN_ID --kit-root %%KIT_ROOT --now %%FIXED_CLOCK --attempt %%ATTEMPT",
+      "eventsToWaitFor": {
+        "Type": "WaitForEvents",
+        "Events": [{ "Event": "PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK" }]
+      },
+      "eventsToDelete": {
+        "Type": "DeleteEvents",
+        "Events": [{ "Event": "PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK" }]
+      },
+      "eventsToAdd": {
+        "Type": "AddEvents",
+        "Events": [{ "Event": "PAYOPS-ARCHIVE_AND_NOTIFY-OK" }]
+      }
+    },
+
+    "reconciliation_flow": {
+      "Type": "Flow",
+      "Sequence": [
+        "watch_inbound_files",
+        "verify_file_integrity",
+        "extract_payment_batch",
+        "validate_payment_schema",
+        "deduplicate_payments",
+        "enrich_fx_rates",
+        "apply_business_day_cutoff",
+        "post_pending_ledger",
+        "reconcile_nostro_ledger",
+        "classify_breaks",
+        "produce_settlement_report",
+        "archive_and_notify"
+      ]
+    }
+  }
+}

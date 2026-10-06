@@ -1,0 +1,129 @@
+{
+  "mappingVersion": "1.0.0",
+  "workflow": "PAYOPS_CROSS_BORDER_RECONCILIATION",
+  "conditionPrefix": "PAYOPS-",
+  "conditionSuffix": "-OK",
+  "note": "Maps each canonical Control-M task to the repository that implements it. The orchestrator wrapper scripts/run-task.sh resolves a task through this file, so Control-M job definitions never hard-code a service path.",
+  "tasks": [
+    {
+      "task": "watch_inbound_files",
+      "order": 1,
+      "repository": "payment-ingestion",
+      "dependsOn": [],
+      "outputCondition": "PAYOPS-WATCH_INBOUND_FILES-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "verify_file_integrity",
+      "order": 2,
+      "repository": "payment-ingestion",
+      "dependsOn": ["watch_inbound_files"],
+      "outputCondition": "PAYOPS-VERIFY_FILE_INTEGRITY-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "extract_payment_batch",
+      "order": 3,
+      "repository": "payment-ingestion",
+      "dependsOn": ["verify_file_integrity"],
+      "outputCondition": "PAYOPS-EXTRACT_PAYMENT_BATCH-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "validate_payment_schema",
+      "order": 4,
+      "repository": "payment-validation",
+      "dependsOn": ["extract_payment_batch"],
+      "outputCondition": "PAYOPS-VALIDATE_PAYMENT_SCHEMA-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "deduplicate_payments",
+      "order": 5,
+      "repository": "payment-validation",
+      "dependsOn": ["validate_payment_schema"],
+      "outputCondition": "PAYOPS-DEDUPLICATE_PAYMENTS-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "enrich_fx_rates",
+      "order": 6,
+      "repository": "fx-enrichment",
+      "dependsOn": ["deduplicate_payments"],
+      "outputCondition": "PAYOPS-ENRICH_FX_RATES-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "apply_business_day_cutoff",
+      "order": 7,
+      "repository": "ledger-reconciliation",
+      "dependsOn": ["enrich_fx_rates"],
+      "outputCondition": "PAYOPS-APPLY_BUSINESS_DAY_CUTOFF-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "post_pending_ledger",
+      "order": 8,
+      "repository": "ledger-reconciliation",
+      "dependsOn": ["apply_business_day_cutoff"],
+      "outputCondition": "PAYOPS-POST_PENDING_LEDGER-OK",
+      "retryLimit": 2,
+      "retryDelaySeconds": 60,
+      "critical": true
+    },
+    {
+      "task": "reconcile_nostro_ledger",
+      "order": 9,
+      "repository": "ledger-reconciliation",
+      "dependsOn": ["post_pending_ledger"],
+      "outputCondition": "PAYOPS-RECONCILE_NOSTRO_LEDGER-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "classify_breaks",
+      "order": 10,
+      "repository": "exception-management",
+      "dependsOn": ["reconcile_nostro_ledger"],
+      "outputCondition": "PAYOPS-CLASSIFY_BREAKS-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": false
+    },
+    {
+      "task": "produce_settlement_report",
+      "order": 11,
+      "repository": "settlement-reporting",
+      "dependsOn": ["classify_breaks"],
+      "outputCondition": "PAYOPS-PRODUCE_SETTLEMENT_REPORT-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": true
+    },
+    {
+      "task": "archive_and_notify",
+      "order": 12,
+      "repository": "payment-notifications",
+      "dependsOn": ["produce_settlement_report"],
+      "outputCondition": "PAYOPS-ARCHIVE_AND_NOTIFY-OK",
+      "retryLimit": 0,
+      "retryDelaySeconds": 0,
+      "critical": false
+    }
+  ]
+}

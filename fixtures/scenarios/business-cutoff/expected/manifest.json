@@ -1,0 +1,209 @@
+{
+  "baseAmounts": {
+    "PAY-2026-0021": "15666.00",
+    "PAY-2026-0022": "10743.60",
+    "PAY-2026-0023": "24745.50",
+    "PAY-2026-0024": "24618.00",
+    "PAY-2026-0025": "12244.50",
+    "PAY-2026-0026": "28453.75"
+  },
+  "breaks": [],
+  "calendarId": "PAYOPS-SG-2026",
+  "countEquations": [
+    "received == rejected + duplicatesRemoved + accepted",
+    "accepted == posted",
+    "posted == matched + broken"
+  ],
+  "counts": {
+    "accepted": 6,
+    "broken": 0,
+    "cutoffAdjusted": 3,
+    "duplicatesRemoved": 0,
+    "matched": 6,
+    "posted": 6,
+    "received": 6,
+    "rejected": 0
+  },
+  "currencyAllowlistVersion": "2026.03",
+  "duplicates": [],
+  "effectiveValueDates": {
+    "PAY-2026-0021": "2026-03-19",
+    "PAY-2026-0022": "2026-03-19",
+    "PAY-2026-0023": "2026-03-19",
+    "PAY-2026-0024": "2026-03-23",
+    "PAY-2026-0025": "2026-03-23",
+    "PAY-2026-0026": "2026-03-23"
+  },
+  "expectedArtifacts": [
+    "input/ledger.csv",
+    "input/payments.csv",
+    "ledger/ledger.sqlite3",
+    "output/archive-manifest.json",
+    "output/notification.json",
+    "output/settlement-report.csv",
+    "output/settlement-report.json",
+    "run-manifest.json",
+    "runtime.json",
+    "stages/breaks.jsonl",
+    "stages/classified-breaks.jsonl",
+    "stages/cutoff-payments.jsonl",
+    "stages/cutoff.json",
+    "stages/deduplicate.json",
+    "stages/deduplicated-payments.jsonl",
+    "stages/duplicates.jsonl",
+    "stages/enriched-payments.jsonl",
+    "stages/exceptions.json",
+    "stages/extract.json",
+    "stages/file-integrity.json",
+    "stages/fx.json",
+    "stages/inbound-manifest.json",
+    "stages/ledger-posting.json",
+    "stages/matched.jsonl",
+    "stages/normalized-payments.jsonl",
+    "stages/notify.json",
+    "stages/reconciliation.json",
+    "stages/rejections.jsonl",
+    "stages/reporting.json",
+    "stages/validate.json",
+    "stages/validated-payments.jsonl"
+  ],
+  "expectedExitSequence": [
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "watch_inbound_files"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "verify_file_integrity"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "extract_payment_batch"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "validate_payment_schema"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "deduplicate_payments"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "enrich_fx_rates"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "apply_business_day_cutoff"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "post_pending_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "reconcile_nostro_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "classify_breaks"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "produce_settlement_report"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "archive_and_notify"
+    }
+  ],
+  "fxRatesUsed": {
+    "PAY-2026-0021": {
+      "rate": "0.746000",
+      "rateDate": "2026-03-19"
+    },
+    "PAY-2026-0022": {
+      "rate": "0.127900",
+      "rateDate": "2026-03-19"
+    },
+    "PAY-2026-0023": {
+      "rate": "1.269000",
+      "rateDate": "2026-03-19"
+    },
+    "PAY-2026-0024": {
+      "rate": "0.746000",
+      "rateDate": "2026-03-19"
+    },
+    "PAY-2026-0025": {
+      "rate": "0.272100",
+      "rateDate": "2026-03-19"
+    },
+    "PAY-2026-0026": {
+      "rate": "0.006695",
+      "rateDate": "2026-03-19"
+    }
+  },
+  "fxTableVersion": "2026.03.1",
+  "inputs": {
+    "payments": "input/payments.csv",
+    "reference": "reference/ledger.csv"
+  },
+  "invariants": [
+    {
+      "description": "A payment_id is posted to the ledger at most once.",
+      "expected": true,
+      "id": "INV-SINGLE-POSTING"
+    },
+    {
+      "description": "Business-day cutoff decisions use the declared timezone and calendar.",
+      "expected": true,
+      "id": "INV-CUTOFF-CALENDAR"
+    },
+    {
+      "description": "Input files are immutable and identified by content hash.",
+      "expected": true,
+      "id": "INV-INPUT-IMMUTABLE"
+    },
+    {
+      "description": "Counts reconcile at every stage.",
+      "expected": true,
+      "id": "INV-COUNTS-RECONCILE"
+    },
+    {
+      "description": "Every record in an output traces to an input file and run identifier.",
+      "expected": true,
+      "id": "INV-TRACEABLE-OUTPUT"
+    },
+    {
+      "description": "Re-running the same fixture produces equivalent normalized outputs.",
+      "expected": true,
+      "id": "INV-DETERMINISTIC-RERUN"
+    }
+  ],
+  "manifestVersion": "1.0.0",
+  "matchedPaymentIds": [
+    "PAY-2026-0021",
+    "PAY-2026-0022",
+    "PAY-2026-0023",
+    "PAY-2026-0024",
+    "PAY-2026-0025",
+    "PAY-2026-0026"
+  ],
+  "provenance": "scenario",
+  "rejections": [],
+  "scenario": "business-cutoff",
+  "scenarioVersion": "1.0.0",
+  "workflow": "PAYOPS_CROSS_BORDER_RECONCILIATION"
+}

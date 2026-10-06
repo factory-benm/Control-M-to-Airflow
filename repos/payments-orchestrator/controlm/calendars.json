@@ -1,0 +1,27 @@
+{
+  "calendarSetVersion": "1.0.0",
+  "note": "Scheduler-side view of the business calendar referenced by the Control-M definitions as DAYSCAL / RuleBasedCalendars. The cutoff task reads its calendar from fixtures/calendars/sg-business-calendar-2026.json.",
+  "calendars": [
+    {
+      "name": "PAYOPS_SG_BUSINESS_2026",
+      "description": "Representative Singapore business calendar for the cross-border reconciliation workflow.",
+      "timezone": "Asia/Singapore",
+      "year": 2026,
+      "weekDays": ["MON", "TUE", "WED", "THU", "FRI"],
+      "cutoffLocalTime": "17:00",
+      "fixtureSource": "fixtures/calendars/sg-business-calendar-2026.json",
+      "excludedDates": [
+        "2026-01-01",
+        "2026-02-17",
+        "2026-02-18",
+        "2026-03-20",
+        "2026-04-03",
+        "2026-05-01",
+        "2026-05-31",
+        "2026-08-09",
+        "2026-11-08",
+        "2026-12-25"
+      ]
+    }
+  ]
+}

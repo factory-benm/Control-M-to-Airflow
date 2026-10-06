@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+.DS_Store
+
+# never commit local credentials or scheduler secrets
+.env
+.env.*
+*.pem
+*.key

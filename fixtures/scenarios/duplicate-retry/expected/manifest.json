@@ -1,0 +1,226 @@
+{
+  "baseAmounts": {
+    "PAY-2026-0011": "6253.80",
+    "PAY-2026-0012": "6533.10",
+    "PAY-2026-0013": "17104.50",
+    "PAY-2026-0014": "62000.00",
+    "PAY-2026-0015": "40003.20",
+    "PAY-2026-0016": "7613.10"
+  },
+  "breaks": [],
+  "calendarId": "PAYOPS-SG-2026",
+  "countEquations": [
+    "received == rejected + duplicatesRemoved + accepted",
+    "accepted == posted",
+    "posted == matched + broken"
+  ],
+  "counts": {
+    "accepted": 6,
+    "broken": 0,
+    "cutoffAdjusted": 0,
+    "duplicatesRemoved": 2,
+    "matched": 6,
+    "posted": 6,
+    "received": 8,
+    "rejected": 0
+  },
+  "currencyAllowlistVersion": "2026.03",
+  "duplicates": [
+    {
+      "duplicate_of_line": 2,
+      "line": 4,
+      "payment_id": "PAY-2026-0012"
+    },
+    {
+      "duplicate_of_line": 5,
+      "line": 7,
+      "payment_id": "PAY-2026-0014"
+    }
+  ],
+  "effectiveValueDates": {
+    "PAY-2026-0011": "2026-03-17",
+    "PAY-2026-0012": "2026-03-17",
+    "PAY-2026-0013": "2026-03-17",
+    "PAY-2026-0014": "2026-03-17",
+    "PAY-2026-0015": "2026-03-17",
+    "PAY-2026-0016": "2026-03-17"
+  },
+  "expectedArtifacts": [
+    "input/ledger.csv",
+    "input/payments.csv",
+    "ledger/ledger.sqlite3",
+    "output/archive-manifest.json",
+    "output/notification.json",
+    "output/settlement-report.csv",
+    "output/settlement-report.json",
+    "run-manifest.json",
+    "runtime.json",
+    "stages/breaks.jsonl",
+    "stages/classified-breaks.jsonl",
+    "stages/cutoff-payments.jsonl",
+    "stages/cutoff.json",
+    "stages/deduplicate.json",
+    "stages/deduplicated-payments.jsonl",
+    "stages/duplicates.jsonl",
+    "stages/enriched-payments.jsonl",
+    "stages/exceptions.json",
+    "stages/extract.json",
+    "stages/file-integrity.json",
+    "stages/fx.json",
+    "stages/inbound-manifest.json",
+    "stages/ledger-posting.json",
+    "stages/matched.jsonl",
+    "stages/normalized-payments.jsonl",
+    "stages/notify.json",
+    "stages/reconciliation.json",
+    "stages/rejections.jsonl",
+    "stages/reporting.json",
+    "stages/validate.json",
+    "stages/validated-payments.jsonl"
+  ],
+  "expectedExitSequence": [
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "watch_inbound_files"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "verify_file_integrity"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "extract_payment_batch"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "validate_payment_schema"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "deduplicate_payments"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "enrich_fx_rates"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "apply_business_day_cutoff"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "post_pending_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "reconcile_nostro_ledger"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "classify_breaks"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "produce_settlement_report"
+    },
+    {
+      "attempt": 1,
+      "exitCode": 0,
+      "task": "archive_and_notify"
+    }
+  ],
+  "fxRatesUsed": {
+    "PAY-2026-0011": {
+      "rate": "0.744500",
+      "rateDate": "2026-03-17"
+    },
+    "PAY-2026-0012": {
+      "rate": "0.128100",
+      "rateDate": "2026-03-17"
+    },
+    "PAY-2026-0013": {
+      "rate": "1.086000",
+      "rateDate": "2026-03-17"
+    },
+    "PAY-2026-0014": {
+      "rate": "1.000000",
+      "rateDate": "2026-03-17"
+    },
+    "PAY-2026-0015": {
+      "rate": "0.138900",
+      "rateDate": "2026-03-17"
+    },
+    "PAY-2026-0016": {
+      "rate": "0.007690",
+      "rateDate": "2026-03-17"
+    }
+  },
+  "fxTableVersion": "2026.03.1",
+  "inputs": {
+    "payments": "input/payments.csv",
+    "reference": "reference/ledger.csv"
+  },
+  "invariants": [
+    {
+      "description": "A payment_id is posted to the ledger at most once.",
+      "expected": true,
+      "id": "INV-SINGLE-POSTING"
+    },
+    {
+      "description": "Retrying after partial failure completes missing work without duplicating completed work.",
+      "expected": true,
+      "id": "INV-RETRY-COMPLETES"
+    },
+    {
+      "description": "Input files are immutable and identified by content hash.",
+      "expected": true,
+      "id": "INV-INPUT-IMMUTABLE"
+    },
+    {
+      "description": "Counts reconcile at every stage.",
+      "expected": true,
+      "id": "INV-COUNTS-RECONCILE"
+    },
+    {
+      "description": "Every record in an output traces to an input file and run identifier.",
+      "expected": true,
+      "id": "INV-TRACEABLE-OUTPUT"
+    },
+    {
+      "description": "Re-running the same fixture produces equivalent normalized outputs.",
+      "expected": true,
+      "id": "INV-DETERMINISTIC-RERUN"
+    }
+  ],
+  "manifestVersion": "1.0.0",
+  "matchedPaymentIds": [
+    "PAY-2026-0011",
+    "PAY-2026-0012",
+    "PAY-2026-0013",
+    "PAY-2026-0014",
+    "PAY-2026-0015",
+    "PAY-2026-0016"
+  ],
+  "provenance": "scenario",
+  "rejections": [],
+  "rerun": {
+    "description": "Re-run every task with the same run directory and fixed clock.",
+    "expectedNewLedgerRowsOnRerun": 0,
+    "expectedPostedAfterRerun": 6,
+    "required": true
+  },
+  "scenario": "duplicate-retry",
+  "scenarioVersion": "1.0.0",
+  "workflow": "PAYOPS_CROSS_BORDER_RECONCILIATION"
+}
