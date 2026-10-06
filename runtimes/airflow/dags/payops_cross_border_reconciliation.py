@@ -59,7 +59,7 @@ VARIABLE = re.compile(r"%%([A-Z][A-Z0-9_]*)")
 COMMAND_VARIABLES = frozenset(
     {"ORCHESTRATOR_HOME", "RUN_DIR", "SCENARIO", "RUN_ID", "KIT_ROOT", "FIXED_CLOCK", "ATTEMPT"}
 )
-RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
 JsonObject = dict[str, Any]
 
@@ -194,8 +194,9 @@ def resolve_run(params: Any, dag_run: Any, variables: dict[str, str]) -> RunValu
     kit_root = Path(str(params.get("kit_root") or KIT_ROOT))
     scenario = str(params.get("scenario") or variables["SCENARIO"])
     run_id = str(params.get("run_id") or f"scheduled-{order_date(dag_run)}")
-    if not RUN_ID_PATTERN.match(run_id):
-        raise AirflowFailException(f"run_id {run_id!r} is not a safe directory name")
+    for name, value in (("run_id", run_id), ("scenario", scenario)):
+        if not SAFE_NAME.fullmatch(value):
+            raise AirflowFailException(f"{name} {value!r} is not a safe directory name")
     scenario_file = kit_root / "fixtures" / "scenarios" / scenario / "scenario.json"
     scenario_doc: JsonObject = (
         json.loads(scenario_file.read_text("utf-8")) if scenario_file.is_file() else {}

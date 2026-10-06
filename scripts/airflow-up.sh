@@ -103,7 +103,9 @@ report_start_failure() {
   for component in "${AIRFLOW_COMPONENTS[@]}"; do
     [ -f "$AIRFLOW_PID_DIR/$component.log" ] || continue
     err "last lines of $component.log:"
-    tail -n 15 "$AIRFLOW_PID_DIR/$component.log" | sed 's/^/    /' >&2
+    # On its first start the API server logs the generated admin password.
+    tail -n 15 "$AIRFLOW_PID_DIR/$component.log" | { grep -vi 'password' || true; } \
+      | sed 's/^/    /' >&2
   done
   airflow_state dag-ready "$PAYOPS_DAG_ID" >&2 || true
 }

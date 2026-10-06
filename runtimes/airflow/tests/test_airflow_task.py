@@ -78,9 +78,14 @@ class TestResolveRun(unittest.TestCase):
         self.assertEqual(run.fixed_clock, "2026-03-16T09:30:00Z")
 
     def test_unsafe_run_ids_are_refused(self) -> None:
-        for run_id in ("../escape", "a/b", ".hidden", "with space"):
+        for run_id in ("../escape", "a/b", ".hidden", "with space", "trailing\n"):
             with self.subTest(run_id=run_id), self.assertRaises(AirflowFailException):
                 self.resolve(run_id=run_id)
+
+    def test_unsafe_scenarios_are_refused(self) -> None:
+        for scenario in ("../../escape", "a/b", ".hidden", "with space", "trailing\n"):
+            with self.subTest(scenario=scenario), self.assertRaises(AirflowFailException):
+                self.resolve(scenario=scenario)
 
 
 class TestClassify(unittest.TestCase):
